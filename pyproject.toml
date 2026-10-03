@@ -1,5 +1,5 @@
 [project]
-name = "wechat-mp-download"
+name = "wechat-mp-download-mcp"
 version = "0.2.0"
 description = "本机微信公众号历史文章 MCP 下载器"
 readme = "README.md"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-wechat-mp-download = "wechatdownload.cli:main"
+wechat-mp-download-mcp = "wechatdownload.cli:main"
 wechat-mp-mcp = "wechatdownload.server:main"
 
 [build-system]

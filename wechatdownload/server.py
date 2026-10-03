@@ -47,7 +47,7 @@ def build_server(app: App | None = None, port: int = 4545, toolset: str | None =
     selected = resolve_toolset(toolset)
     instructions = AGENT_INSTRUCTIONS if selected == "agent" else AGENT_INSTRUCTIONS + " 当前是完整工具面。"
     mcp = FastMCP(
-        name="wechat-mp-download",
+        name="wechat-mp-download-mcp",
         instructions=instructions,
         host="127.0.0.1",
         port=port,

@@ -1,4 +1,4 @@
-# wechat-mp-download
+# wechat-mp-download-mcp
 
 本机微信公众号文章下载器，版本 0.2.0。没有界面。MCP 是主入口，命令行调用同一套下载库。
 
@@ -39,7 +39,7 @@ pip install -e .
 D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
 ```
 
-脚本入口是 `wechat-mp-download` 和 `wechat-mp-mcp`。未安装到环境里时，用 `python -m wechatdownload` 和 `python -m wechatdownload.server`。
+脚本入口是 `wechat-mp-download-mcp` 和 `wechat-mp-mcp`。未安装到环境里时，用 `python -m wechatdownload` 和 `python -m wechatdownload.server`。
 
 ## 数据目录
 
@@ -62,16 +62,16 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
 
 ## 接入 MCP
 
-stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp/wechat-mp-download`，并放进 Claude、Codex、Grok、Cursor 的项目冷启动。进程启动不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
+stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp/wechat-mp-download-mcp`，并放进 Claude、Codex、Grok、Cursor 的项目冷启动。进程启动不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
 
 ```json
 {
   "mcpServers": {
-    "wechat-mp-download": {
+    "wechat-mp-download-mcp": {
       "command": "D:\\reverse_ENV\\.venv\\Scripts\\python.exe",
       "args": ["-m", "wechatdownload.server"],
       "env": {
-        "PYTHONPATH": "D:\\reverse_ENV\\mcp\\wechat-mp-download",
+        "PYTHONPATH": "D:\\reverse_ENV\\mcp\\wechat-mp-download-mcp",
         "WECHAT_MP_TOOLSET": "agent"
       }
     }
@@ -417,4 +417,4 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
 这是独立的 Private 仓库。解包出的 exe、dll、pyd、常量转储、会话、密钥和下载结果不进 Git。
 
-reverse_ENV 只用 gitlink 固定 `mcp/wechat-mp-download`，不设置浮动 submodule 分支。更新代码时先在本仓库提交并推送，再在主仓移动 gitlink。
+reverse_ENV 只用 gitlink 固定 `mcp/wechat-mp-download-mcp`，不设置浮动 submodule 分支。更新代码时先在本仓库提交并推送，再在主仓移动 gitlink。

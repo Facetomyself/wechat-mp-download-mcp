@@ -1,0 +1,20 @@
+[project]
+name = "wechat-mp-download"
+version = "0.1.0"
+description = "本机微信公众号历史文章 MCP 下载器"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "mcp>=1.28",
+]
+
+[project.scripts]
+wechat-mp-download = "wechatdownload.cli:main"
+wechat-mp-mcp = "wechatdownload.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wechatdownload*"]

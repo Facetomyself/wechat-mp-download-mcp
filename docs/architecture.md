@@ -1,23 +1,47 @@
 # 架构
 
-服务跑在已经登录微信电脑版的这台机器上。MCP 是无界面入口，下载库不依赖窗口。
+使用方式、参数和实测案例见仓库根目录的 `README.md`。本文只记录边界。
 
 ```text
-MCP 客户端
+MCP 客户端或命令行
   │ stdio，或仅绑定 127.0.0.1 的 streamable HTTP
   ▼
-wechatdownload.server
+wechatdownload.server / wechatdownload.cli
   ▼
 wechatdownload.app
-  ├─ store.SessionStore     会话文件，工具结果不含密钥
-  ├─ Job                    后台线程，清单写在数据目录
+  ├─ store.SessionStore     session.json，对外只有 public()
+  ├─ Job                    一个后台线程，清单写在数据目录
   └─ client / listing / album / article / session
         ▼
    mp.weixin.qq.com
 ```
 
-`uin`、`key`、`pass_ticket` 由微信在打开公众号页时写出。`prepare_account` 给出确认链接，用户在微信里打开，然后 `capture_session` 扫描本机目录，或 `import_session_url` 接收复制出的链接。
+## 会话
 
-长任务立即返回 `job_id`。密钥失效时状态是 `needs_session`，记下偏移；重新捕获后 `resume_job` 从该偏移继续。同一时刻只跑一个任务。
+`uin`、`key`、`pass_ticket` 由已登录的微信电脑版在打开公众号页时写出。程序不计算这些值。
 
-请求主机固定为 `mp.weixin.qq.com`。历史列表默认用修正后的 JSON 解析，不再用 4.6 的 `general_msg_list` 切片。
+`prepare_account` 给出确认链接。用户在微信里打开后，`capture_session` 扫描本机 `xwechat` 或 `WeChat` 目录，或由 `import_session_url` 接收复制出的链接。校验请求是 `profile_ext?action=home`。正文里出现「请在微信客户端打开链接」视为密钥失效。
+
+`download_one` 不要求已校验会话。它直接请求文章 URL。保存目录优先用会话里的 `biz`，否则用页面里的 `biz`。页面要求在微信内打开、且没有 `js_content` 或 `cdn_url` 时返回失败，不写入文件。
+
+`list_history`、`download_history`、`list_album`、`download_album` 在发请求前调用 `SessionStore.require()`。没有已校验会话时停在工具层，不会发出空的 `getmsg`。空的 `getmsg` 在接口上的表现是 `ret=-3`、`errmsg=no session`。
+
+## 任务
+
+长任务立即返回 `job_id`。同一时刻只跑一个任务。状态是 `queued`、`running`、`done`、`needs_session`、`cancelled`、`failed`。
+
+历史任务遇到密钥失效时记下 `resume_offset`。`resume_job` 只接受 `needs_session`、`cancelled`、`failed`，并从该偏移继续。合集恢复时跳过 `done_urls` 里已经下载的链接。
+
+## 列表
+
+历史默认用修正解析：`general_msg_list` 可以是字符串或对象，读取 `next_offset` 和 `can_msg_continue`。4.6 的切片解析和每次偏移加 10 只在 `parser=legacy`、`offset=legacy` 或 `diagnose_page` 中使用。
+
+一篇推送展开主条、`multi_app_msg_item_list` 和 `app_msg_ext_info_list`。空链接记为 `empty_content_url`。
+
+合集和主页走 `action=getalbum`，不走 `getmsg`。主页 HTML 先抽出合集链接，再逐个请求。
+
+## 保存
+
+主机名必须是 `mp.weixin.qq.com`。单篇写到 `articles/<biz>/`。历史和合集任务写到 `jobs/<job_id>/`，清单是 UTF-8 BOM 的 CSV。`diagnose_page` 的 `path` 必须位于数据目录内。
+
+工具结果、清单和任务 JSON 不包含密钥原文。

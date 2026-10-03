@@ -62,7 +62,7 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
 
 ## 接入 MCP
 
-stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp/wechat-mp-download`，按需启用，不进冷启动。不进冷启动是为了不把公众号工具灌进无关的逆向会话。进程本身可以一直开着：导入时不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
+stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp/wechat-mp-download`，并放进 Claude、Codex、Grok、Cursor 的项目冷启动。进程启动不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
 
 ```json
 {
@@ -79,7 +79,7 @@ stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp
 }
 ```
 
-Grok 和 Codex 的项目配置里这段保持 `enabled = false`。要用时改成 `true`，用完改回 `false`。Claude 只在这次任务把 `wechat-mp-download` 加进 `enabledMcpjsonServers`。Cursor 从 `.cursor/mcp.on-demand.json` 复制到 `.cursor/mcp.json`，用完移回。不要写进用户级 `~/.grok`、`~/.codex`、`~/.claude.json` 或 `~/.cursor`。
+Grok 和 Codex 的项目配置里这段是 `enabled = true`。Claude 的 `enabledMcpjsonServers` 和 Cursor 的 `.cursor/mcp.json` 都包含它。不要写进用户级 `~/.grok`、`~/.codex`、`~/.claude.json` 或 `~/.cursor`。
 
 独立运行时，把 `PYTHONPATH` 换成仓库根目录，或改用 `cwd` 指向仓库根目录。数据目录建议单独指定，避免和别的任务共用会话：
 

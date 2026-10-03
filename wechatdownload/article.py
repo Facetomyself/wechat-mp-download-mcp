@@ -80,6 +80,30 @@ def html_to_markdown(page: str) -> str:
     return delete_md_irrelevant_information(text)
 
 
+_SCRIPT = re.compile(r"<script\b[^>]*>.*?</script>", re.I | re.S)
+_STYLE = re.compile(r"<style\b[^>]*>.*?</style>", re.I | re.S)
+_TAG = re.compile(r"<[^>]+>")
+
+
+def excerpt_text(page: str, limit: int = 600) -> str:
+    """从正文起点取有限片段，转成纯文本。不把整页交给 html2text。"""
+    size = max(0, min(int(limit or 0), 2000))
+    if size == 0:
+        return ""
+    source = page or ""
+    start = JS_CONTENT.search(source)
+    if start:
+        source = source[start.start() : start.start() + 80_000]
+    else:
+        body = BODY_TAG.search(source)
+        source = source[body.start() : body.start() + 80_000] if body else source[:80_000]
+    source = _SCRIPT.sub(" ", source)
+    source = _STYLE.sub(" ", source)
+    source = _TAG.sub(" ", source)
+    text = re.sub(r"\s+", " ", html.unescape(source)).strip()
+    return text[:size]
+
+
 def parse_picture_pages(page: str) -> str | None:
     urls = [html.unescape(item) for item in CDN_URL.findall(page or "")]
     if not urls:

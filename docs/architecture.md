@@ -24,7 +24,11 @@ wechatdownload.app
 
 `download_one` 不要求已校验会话。它直接请求文章 URL。保存目录优先用会话里的 `biz`，否则用页面里的 `biz`。页面要求在微信内打开、且没有 `js_content` 或 `cdn_url` 时返回失败，不写入文件。
 
-`list_history`、`download_history`、`list_album`、`download_album` 在发请求前调用 `SessionStore.require()`。没有已校验会话时停在工具层，不会发出空的 `getmsg`。空的 `getmsg` 在接口上的表现是 `ret=-3`、`errmsg=no session`。
+`list_history` 和 `download_history` 在发请求前调用 `SessionStore.require()`。没有已校验会话时停在工具层，不会发出空的 `getmsg`。空的 `getmsg` 在接口上的表现是 `ret=-3`、`errmsg=no session`。
+
+`list_album` 和 `download_album` 不调用 `require()`。已校验会话存在时带上其中的 `uin` 和 `key`，否则用空凭证请求公开合集。历史恢复仍要会话；合集恢复不要求。
+
+默认工具面是 `agent`：`mp_session`、`mp_fetch`、`mp_history`、`mp_job`、`mp_diagnose`。`WECHAT_MP_TOOLSET=full` 才注册 14 个工具。服务启动不扫描微信目录，也不访问网络。`mp_fetch` 的摘录从 `js_content` 起截取有限片段再去标签，不把整页交给 `html2text`。工具结果不返回 HTML。历史任务默认不把 getmsg 原文落盘。
 
 ## 任务
 
@@ -38,7 +42,7 @@ wechatdownload.app
 
 一篇推送展开主条、`multi_app_msg_item_list` 和 `app_msg_ext_info_list`。空链接记为 `empty_content_url`。
 
-合集和主页走 `action=getalbum`，不走 `getmsg`。主页 HTML 先抽出合集链接，再逐个请求。
+合集和主页走 `action=getalbum`，不走 `getmsg`。主页 HTML 先抽出合集链接，再逐个请求。公开合集在空 `uin`、空 `key` 下可以列出。
 
 ## 保存
 

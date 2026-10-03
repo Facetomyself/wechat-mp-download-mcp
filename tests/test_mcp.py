@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from wechatdownload.app import App, ensure_mp_url
 from wechatdownload.models import Credential
-from wechatdownload.server import build_server
+from wechatdownload.server import AGENT_NAMES, FULL_NAMES, build_server
 from wechatdownload.urls import KEY_EXPIRED_TEXT
 
 
@@ -191,26 +191,62 @@ class McpAppTests(unittest.TestCase):
         )
         listed = self.app.list_album("https://mp.weixin.qq.com/mp/homepage?__biz=Abcd1234")
         self.assertEqual(listed["titles"], ["合集文"])
-        names = {tool.name for tool in build_server(self.app)._tool_manager.list_tools()}
-        self.assertEqual(
-            names,
+        names = {tool.name for tool in build_server(self.app, toolset="full")._tool_manager.list_tools()}
+        self.assertEqual(names, set(FULL_NAMES))
+
+    def test_public_album_agent_toolset_and_bounded_excerpt(self) -> None:
+        link = "https://mp.weixin.qq.com/mp/appmsgalbum?__biz=Abcd1234&album_id=99"
+        self.transport.album["action=getalbum"] = compact(
             {
-                "prepare_account",
-                "capture_session",
-                "import_session_url",
-                "session_status",
-                "list_history",
-                "download_history",
-                "download_one",
-                "list_album",
-                "download_album",
-                "job_status",
-                "job_cancel",
-                "resume_job",
-                "export_manifest",
-                "diagnose_page",
-            },
+                "getalbum_resp": {
+                    "continue_flag": 0,
+                    "article_list": [{"title": "合集文", "url": ARTICLE, "msgid": "9", "itemidx": "1"}],
+                }
+            }
         )
+        listed = self.app.list_album(link)
+        self.assertTrue(listed["ok"])
+        self.assertEqual(listed["titles"], ["合集文"])
+        self.assertFalse(self.app.session_status()["ready"])
+        self.transport.articles[ARTICLE] = HTML
+        started = self.app.download_album(link)
+        self.assertTrue(started["ok"])
+        self.app.wait_job(started["job_id"])
+        done = self.app.job_status(started["job_id"])
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["summary"]["downloaded"], 1)
+
+        info = self.app.fetch(ARTICLE, mode="info")
+        self.assertTrue(info["ok"])
+        self.assertEqual(info["excerpt"], "hi")
+        self.assertNotIn("<", info["excerpt"])
+        self.assertNotIn("saved_path", info)
+        article_dir = self.root / "articles"
+        before = list(article_dir.rglob("*")) if article_dir.exists() else []
+        huge = (
+            "<html><head><meta property=\"og:title\" content=\"甲\"></head><body>"
+            "<script>SECRETTOKEN uin=111 key=abc</script>"
+            "<div id=\"js_content\"><p>" + ("字" * 5000) + "</p></div></body></html>"
+        )
+        self.transport.articles[ARTICLE] = huge
+        peeked = self.app.fetch(ARTICLE, mode="info", excerpt_chars=80)
+        self.assertLessEqual(len(peeked["excerpt"]), 80)
+        self.assertNotIn("SECRETTOKEN", peeked["excerpt"])
+        self.assertNotIn("js_content", peeked["excerpt"])
+        self.assertNotIn("<", peeked["excerpt"])
+        self.assertEqual(list(article_dir.rglob("*")) if article_dir.exists() else [], before)
+        saved = self.app.fetch(ARTICLE, mode="save", excerpt_chars=80)
+        self.assertTrue(saved["ok"])
+        self.assertLessEqual(len(saved["excerpt"]), 80)
+        self.assertTrue(Path(saved["saved_path"]).is_file())
+
+        agent_tools = list(build_server(self.app, toolset="agent")._tool_manager.list_tools())
+        self.assertEqual({tool.name for tool in agent_tools}, set(AGENT_NAMES))
+        described = " ".join(tool.description or "" for tool in agent_tools)
+        self.assertLess(len(described), 500)
+        diagnose = next(tool for tool in agent_tools if tool.name == "mp_diagnose")
+        rejected = diagnose.fn(body="x" * 20_001)
+        self.assertFalse(rejected["ok"])
 
 
 if __name__ == "__main__":

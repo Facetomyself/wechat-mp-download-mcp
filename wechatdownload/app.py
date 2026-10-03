@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from wechatdownload.album import crawl_album
-from wechatdownload.article import extract_title, select_article_html, write_article_files
+from wechatdownload.article import excerpt_text, extract_nickname, extract_title, select_article_html, write_article_files
 from wechatdownload.biz import extract_biz
 from wechatdownload.client import CrawlOptions, HistoryCrawler, write_manifest
 from wechatdownload.http import ARTICLE_UA, UrllibTransport
@@ -19,7 +19,7 @@ from wechatdownload.listing import diff_parsers
 from wechatdownload.models import ArticleRef, CrawlRow
 from wechatdownload.session import credentials_in_text, scan_credentials
 from wechatdownload.store import SessionStore
-from wechatdownload.urls import KEY_EXPIRED_TEXT, build_home_url, normalize_content_url
+from wechatdownload.urls import KEY_EXPIRED_TEXT, build_home_url, is_collection_url, normalize_content_url
 
 ALLOWED_HOST = "mp.weixin.qq.com"
 MANUAL_STEP = "在已登录的微信电脑版中打开 confirmation_url，等公众号页面加载完成后再调用 capture_session。扫描不到时，把微信里复制出的链接交给 import_session_url。"
@@ -40,6 +40,17 @@ def ensure_mp_url(url: str) -> str:
     if parsed.scheme not in {"http", "https"} or host != ALLOWED_HOST:
         raise ValueError("只允许 mp.weixin.qq.com")
     return url.strip()
+
+
+def clamp_excerpt(value: object, default: int = 600) -> int:
+    if value in (None, ""):
+        parsed = default
+    else:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+    return max(0, min(parsed, 2000))
 
 
 def summarize_rows(rows: list[CrawlRow]) -> dict:
@@ -205,13 +216,13 @@ class App:
     def list_album(self, url: str, max_pages: int = 5) -> dict:
         try:
             ensure_mp_url(url)
-            session = self.store.require()
+            creds = self._album_credentials(url)
             articles = crawl_album(
                 url,
-                biz=str(session["biz"]),
-                uin=str(session["uin"]),
-                key=str(session["key"]),
-                pass_ticket=str(session.get("pass_ticket") or ""),
+                biz=creds["biz"],
+                uin=creds["uin"],
+                key=creds["key"],
+                pass_ticket=creds["pass_ticket"],
                 get_text=self._get,
                 max_pages=max_pages,
             )
@@ -228,37 +239,59 @@ class App:
             ),
             encoding="utf-8",
         )
+        titles = [item.title for item in articles][:20]
         return {
             "ok": True,
             "count": len(articles),
-            "titles": [item.title for item in articles][:20],
+            "titles": titles,
+            "truncated": len(articles) > 20,
             "manifest_path": str(path),
         }
 
     def download_one(self, url: str) -> dict:
+        opened = self._open_article(url)
+        if not opened["ok"]:
+            return opened
+        return {
+            "ok": True,
+            "title": opened["title"],
+            "kind": opened["kind"],
+            "saved_path": self._write_single(opened),
+        }
+
+    def fetch(self, url: str, mode: str = "info", excerpt_chars: int = 600) -> dict:
+        selected = (mode or "info").strip().lower()
+        if selected == "list":
+            return self.list_album(url)
+        if selected not in {"info", "save"}:
+            return {"ok": False, "error": "mode 只能是 info、save 或 list"}
         try:
             cleaned = ensure_mp_url(url)
-            raw = self._get(cleaned, ARTICLE_UA)
-        except (RuntimeError, ValueError, OSError) as exc:
+        except ValueError as exc:
             return {"ok": False, "error": str(exc)}
-        if KEY_EXPIRED_TEXT in raw and "js_content" not in raw and "cdn_url" not in raw:
-            return {"ok": False, "error": KEY_EXPIRED_TEXT, "manual_step": MANUAL_STEP}
-        try:
-            page, kind = select_article_html(raw)
-        except (RuntimeError, ValueError, OSError) as exc:
-            return {"ok": False, "error": str(exc)}
-        biz = str(self.store.load().get("biz") or "") or extract_biz(cleaned) or extract_biz(raw) or "single"
-        article = ArticleRef(
-            title=extract_title(page) or "untitled",
-            url=normalize_content_url(cleaned),
-            published_at=None,
-            copyright_stat=None,
-            copyright_type=None,
-            source="single",
-        )
-        folder = self.root / "articles" / biz
-        written = write_article_files(folder, article, page, save_markdown=False)
-        return {"ok": True, "title": article.title, "kind": kind, "saved_path": str(written[0])}
+        if is_collection_url(cleaned):
+            if selected == "info":
+                return {"ok": False, "error": "这是合集或主页，mode 用 list 或 save"}
+            preview = self.list_album(cleaned, max_pages=1)
+            started = self.download_album(cleaned)
+            if preview.get("ok"):
+                started["count"] = preview.get("count")
+                started["titles"] = preview.get("titles") or []
+                started["truncated"] = bool(preview.get("truncated"))
+            return started
+        opened = self._open_article(cleaned)
+        if not opened["ok"]:
+            return opened
+        result = {
+            "ok": True,
+            "title": opened["title"],
+            "kind": opened["kind"],
+            "nickname": extract_nickname(opened["page"]),
+            "excerpt": excerpt_text(opened["page"], clamp_excerpt(excerpt_chars)),
+        }
+        if selected == "save":
+            result["saved_path"] = self._write_single(opened)
+        return result
 
     def job_status(self, job_id: str = "") -> dict:
         job = self._job(job_id)
@@ -279,10 +312,11 @@ class App:
             return {"ok": False, "error": "没有任务"}
         if job.status not in {"needs_session", "cancelled", "failed"}:
             return {"ok": False, "error": f"任务状态是 {job.status}，不能恢复"}
-        try:
-            self.store.require()
-        except RuntimeError as exc:
-            return {"ok": False, "error": str(exc)}
+        if job.kind == "history":
+            try:
+                self.store.require()
+            except RuntimeError as exc:
+                return {"ok": False, "error": str(exc)}
         if self._busy():
             return {"ok": False, "error": "已有任务在跑", "job_id": self._running_id()}
         job.status = "queued"
@@ -342,18 +376,71 @@ class App:
         if thread is not None:
             thread.join(timeout)
 
-    def _start_job(self, kind: str, options: dict) -> dict:
+    def _album_credentials(self, url: str) -> dict[str, str]:
+        data = self.store.load()
+        biz = extract_biz(url) or str(data.get("biz") or "")
+        if data.get("verified") and data.get("uin") and data.get("key"):
+            return {
+                "biz": biz or str(data.get("biz") or ""),
+                "uin": str(data.get("uin") or ""),
+                "key": str(data.get("key") or ""),
+                "pass_ticket": str(data.get("pass_ticket") or ""),
+            }
+        return {"biz": biz, "uin": "", "key": "", "pass_ticket": ""}
+
+    def _open_article(self, url: str) -> dict:
         try:
-            session = self.store.require()
-        except RuntimeError as exc:
+            cleaned = ensure_mp_url(url)
+            raw = self._get(cleaned, ARTICLE_UA)
+        except (RuntimeError, ValueError, OSError) as exc:
             return {"ok": False, "error": str(exc)}
+        if KEY_EXPIRED_TEXT in raw and "js_content" not in raw and "cdn_url" not in raw:
+            return {"ok": False, "error": KEY_EXPIRED_TEXT, "manual_step": MANUAL_STEP}
+        try:
+            page, kind = select_article_html(raw)
+        except (RuntimeError, ValueError, OSError) as exc:
+            return {"ok": False, "error": str(exc)}
+        return {
+            "ok": True,
+            "cleaned": cleaned,
+            "raw": raw,
+            "page": page,
+            "kind": kind,
+            "title": extract_title(page) or "untitled",
+            "biz": str(self.store.load().get("biz") or "") or extract_biz(cleaned) or extract_biz(raw) or "single",
+        }
+
+    def _write_single(self, opened: dict) -> str:
+        article = ArticleRef(
+            title=opened["title"],
+            url=normalize_content_url(opened["cleaned"]),
+            published_at=None,
+            copyright_stat=None,
+            copyright_type=None,
+            source="single",
+        )
+        folder = self.root / "articles" / opened["biz"]
+        written = write_article_files(folder, article, opened["page"], save_markdown=False)
+        return str(written[0])
+
+    def _start_job(self, kind: str, options: dict) -> dict:
+        if kind == "history":
+            try:
+                session = self.store.require()
+            except RuntimeError as exc:
+                return {"ok": False, "error": str(exc)}
+            biz = str(session["biz"])
+        elif kind == "album":
+            biz = self._album_credentials(str(options.get("url") or ""))["biz"]
+        else:
+            return {"ok": False, "error": f"未知任务 {kind}"}
         if self._busy():
             return {"ok": False, "error": "已有任务在跑", "job_id": self._running_id()}
         job = Job(
             id=uuid.uuid4().hex[:12],
             kind=kind,
             status="queued",
-            biz=str(session["biz"]),
+            biz=biz,
             options={key: value for key, value in options.items() if key != "cancel_event"},
             created_at=datetime.now().isoformat(timespec="seconds"),
         )
@@ -372,8 +459,8 @@ class App:
         folder = self.root / "jobs" / job.id
         folder.mkdir(parents=True, exist_ok=True)
         try:
-            session = self.store.require()
             if job.kind == "history":
+                session = self.store.require()
                 options, explicit_offset = self._crawl_options(job.options, download=True)
                 options.out_dir = folder
                 options.cancel_event = job.cancel_event
@@ -383,6 +470,9 @@ class App:
                     options.start_offset = explicit_offset
                 rows = self._history(session, options)
             elif job.kind == "album":
+                session = self._album_credentials(str(job.options.get("url") or ""))
+                if not session["biz"]:
+                    session["biz"] = job.biz
                 rows = self._album_rows(session, job, folder)
             else:
                 raise RuntimeError(f"未知任务 {job.kind}")

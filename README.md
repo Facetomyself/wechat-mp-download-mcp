@@ -62,7 +62,7 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
 
 ## 接入 MCP
 
-stdio 是正式入口。reverse_ENV 把本仓库固定成 Private submodule `mcp/wechat-mp-download-mcp`，并放进 Claude、Codex、Grok、Cursor 的项目冷启动。进程启动不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
+stdio 是正式入口。reverse_ENV 把本仓库固定成 Public submodule `mcp/wechat-mp-download-mcp`，并放进 Claude、Codex、Grok、Cursor 的项目冷启动。进程启动不扫描微信目录，也不访问网络；默认只注册 5 个短工具。项目目录里的配置是：
 
 ```json
 {
@@ -415,6 +415,6 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
 ## 仓库范围
 
-这是独立的 Private 仓库。解包出的 exe、dll、pyd、常量转储、会话、密钥和下载结果不进 Git。
+这是独立的 Public 仓库。解包出的 exe、dll、pyd、常量转储、会话、密钥和下载结果不进 Git。
 
 reverse_ENV 只用 gitlink 固定 `mcp/wechat-mp-download-mcp`，不设置浮动 submodule 分支。更新代码时先在本仓库提交并推送，再在主仓移动 gitlink。

@@ -60,7 +60,7 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 | `session_status` | 会话是否有效 |
 | `list_history` | 同步列出最多 30 页 |
 | `download_history` | 后台下载，`max_pages` 为 0 时一直翻到结束 |
-| `download_one` | 下载单篇 HTML |
+| `download_one` | 下载单篇 HTML。公开页直接请求；页面要求微信内打开时停下 |
 | `list_album` / `download_album` | 合集和主页 |
 | `job_status` / `job_cancel` / `resume_job` | 任务进度、取消、从偏移恢复 |
 | `export_manifest` | 清单的 csv 或 json 路径 |

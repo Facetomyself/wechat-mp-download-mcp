@@ -141,6 +141,21 @@ class McpAppTests(unittest.TestCase):
         saved = self.app.download_one(ARTICLE)
         self.assertTrue(saved["ok"])
         self.assertTrue(Path(saved["saved_path"]).is_file())
+
+    def test_download_one_public_page_does_not_need_session(self) -> None:
+        self.transport.articles[ARTICLE] = HTML
+        saved = self.app.download_one(ARTICLE)
+        self.assertTrue(saved["ok"])
+        self.assertEqual(saved["title"], "甲")
+        self.assertFalse(self.app.session_status()["ready"])
+        self.assertNotIn(SECRET, json.dumps(saved, ensure_ascii=False))
+
+    def test_download_one_wechat_gate_stays_closed(self) -> None:
+        self.transport.articles[ARTICLE] = f"<html><body>{KEY_EXPIRED_TEXT}</body></html>"
+        saved = self.app.download_one(ARTICLE)
+        self.assertFalse(saved["ok"])
+        self.assertEqual(saved["error"], KEY_EXPIRED_TEXT)
+        self.assertFalse(list((self.root / "articles").glob("*")))
         body = compact(
             {
                 "ret": 0,

@@ -14,7 +14,7 @@ from wechatdownload.album import crawl_album
 from wechatdownload.article import extract_title, select_article_html, write_article_files
 from wechatdownload.biz import extract_biz
 from wechatdownload.client import CrawlOptions, HistoryCrawler, write_manifest
-from wechatdownload.http import UrllibTransport
+from wechatdownload.http import ARTICLE_UA, UrllibTransport
 from wechatdownload.listing import diff_parsers
 from wechatdownload.models import ArticleRef, CrawlRow
 from wechatdownload.session import credentials_in_text, scan_credentials
@@ -238,12 +238,16 @@ class App:
     def download_one(self, url: str) -> dict:
         try:
             cleaned = ensure_mp_url(url)
-            session = self.store.require()
-            page, kind = select_article_html(self._get(cleaned))
+            raw = self._get(cleaned, ARTICLE_UA)
         except (RuntimeError, ValueError, OSError) as exc:
             return {"ok": False, "error": str(exc)}
-        if KEY_EXPIRED_TEXT in page and "js_content" not in page and "cdn_url" not in page:
-            return {"ok": False, "error": KEY_EXPIRED_TEXT}
+        if KEY_EXPIRED_TEXT in raw and "js_content" not in raw and "cdn_url" not in raw:
+            return {"ok": False, "error": KEY_EXPIRED_TEXT, "manual_step": MANUAL_STEP}
+        try:
+            page, kind = select_article_html(raw)
+        except (RuntimeError, ValueError, OSError) as exc:
+            return {"ok": False, "error": str(exc)}
+        biz = str(self.store.load().get("biz") or "") or extract_biz(cleaned) or extract_biz(raw) or "single"
         article = ArticleRef(
             title=extract_title(page) or "untitled",
             url=normalize_content_url(cleaned),
@@ -252,7 +256,7 @@ class App:
             copyright_type=None,
             source="single",
         )
-        folder = self.root / "articles" / str(session["biz"])
+        folder = self.root / "articles" / biz
         written = write_article_files(folder, article, page, save_markdown=False)
         return {"ok": True, "title": article.title, "kind": kind, "saved_path": str(written[0])}
 

@@ -18,13 +18,13 @@
 
 ## MCP
 
-stdio 是主入口。在这个目录启动：
+stdio 是主入口。在仓库根目录启动：
 
 ```text
 D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
 ```
 
-客户端配置：
+reverse_ENV 把本仓库固定为 `mcp\wechat-mp-download`，并用 `PYTHONPATH` 指向该目录：
 
 ```json
 {
@@ -32,7 +32,9 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m wechatdownload.server
     "wechat-mp-download": {
       "command": "D:\\reverse_ENV\\.venv\\Scripts\\python.exe",
       "args": ["-m", "wechatdownload.server"],
-      "cwd": "D:\\reverse_ENV\\workspace\\wechat-mp-download"
+      "env": {
+        "PYTHONPATH": "D:\\reverse_ENV\\mcp\\wechat-mp-download"
+      }
     }
   }
 }
@@ -78,4 +80,4 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
 ## 仓库范围
 
-这个目录是独立仓库。解包出的 exe、dll、常量转储和会话文件不进 Git。主仓 `reverse_ENV` 的工作区当时还有别的未提交改动，所以这次没有改它的项目登记。
+这个目录是独立仓库。解包出的 exe、dll、常量转储和会话文件不进 Git。reverse_ENV 以 Private submodule 固定在 `mcp\wechat-mp-download`，目录名是 `wechat-mp-download`，按需启用，不进冷启动。

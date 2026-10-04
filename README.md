@@ -2,7 +2,7 @@
 
 本机微信公众号文章下载器，版本 0.2.0。没有界面。MCP 是主入口，命令行调用同一套下载库。
 
-历史列表默认完整读取 `getmsg` JSON，并跟随服务端 `next_offset`。4.6 那种从 `general_msg_list":"` 切到 `","next_offset` 的解析只留在 `diagnose_page` 里做对照。请求主机只允许 `mp.weixin.qq.com`。
+历史列表默认完整读取 `getmsg` JSON，并跟随服务端 `next_offset`。请求主机只允许 `mp.weixin.qq.com`。
 
 `uin`、`key`、`pass_ticket` 只写在数据目录的 `session.json`。工具结果里最多出现 uin 末四位，不返回密钥本身。
 
@@ -22,8 +22,7 @@
 - 不在本地计算 `uin` 或 `key`。
 - 不访问 `mp.weixin.qq.com` 以外的主机。
 - 不把代理默认设到 `127.0.0.1:7890`。MCP 工具没有代理参数；只有 CLI 的 `--proxy`。
-- 不调用 4.6 常量里的版本检查地址。
-- 不生成 PDF 或 docx。那两项在原工具里是外部程序。
+- 不生成 PDF 或 docx。
 
 ## 安装
 
@@ -342,7 +341,7 @@ diagnose_page
   path: <数据目录>/jobs/<job_id>/_pages/offset-0.json
 ```
 
-返回 `legacy_count`、`fixed_count`、`only_fixed_count` 和最多 20 条 `only_fixed`。`only_fixed` 是修正解析多出来的文章，也就是 4.6 切片会漏掉的那部分。`path` 必须位于当前数据目录，不能读目录外的文件。
+返回 `legacy_count`、`fixed_count`、`only_fixed_count` 和最多 20 条 `only_fixed`。`only_fixed` 是完整 JSON 解析比字符串切片多出来的文章。`path` 必须位于当前数据目录，不能读目录外的文件。
 
 命令行对照一份已经保存的响应：
 
@@ -350,7 +349,7 @@ diagnose_page
 python -m wechatdownload diagnose jobs\某任务\_pages\offset-0.json
 ```
 
-切片会漏文的几种页面：`next_offset` 出现在列表前面，列表和 `next_offset` 之间还有别的字段，`general_msg_list` 已经是对象而不是字符串，或者 JSON 里有空格。修正解析接受字符串或对象，并读取 `next_offset` 和 `can_msg_continue`。旧逻辑每次把偏移加 10，服务端给出的下一偏移若有空隙，中间那一窗不会再请求。
+字符串切片会漏文的几种页面：`next_offset` 出现在列表前面，列表和 `next_offset` 之间还有别的字段，`general_msg_list` 已经是对象而不是字符串，或者 JSON 里有空格。默认解析接受字符串或对象，并读取 `next_offset` 和 `can_msg_continue`。`offset=legacy` 时每次把偏移加 10；服务端给出的下一偏移若有空隙，中间那一窗不会再请求。
 
 一篇推送里的 `multi_app_msg_item_list` 和 `app_msg_ext_info_list` 都会展开。空的 `content_url` 记入清单，原因是 `empty_content_url`，而不是丢掉。
 
@@ -415,6 +414,6 @@ D:\reverse_ENV\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
 ## 仓库范围
 
-这是独立的 Public 仓库。解包出的 exe、dll、pyd、常量转储、会话、密钥和下载结果不进 Git。
+这是独立的 Public 仓库。会话、密钥和下载结果不进 Git。
 
 reverse_ENV 只用 gitlink 固定 `mcp/wechat-mp-download-mcp`，不设置浮动 submodule 分支。更新代码时先在本仓库提交并推送，再在主仓移动 gitlink。

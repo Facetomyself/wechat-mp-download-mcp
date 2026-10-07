@@ -99,9 +99,9 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 整号历史和合集需要微信在打开公众号页时写出的 `uin`、`key`、`pass_ticket`。单篇公开文章不需要。没有已校验会话时，历史和合集只返回确认链接，不下载文章页上已经看得见的内容。每个公众号、每次密钥失效，都做一次：
 
 1. `prepare_account`，传入文章链接、合集链接，或含 `__biz` 的文本。
-2. 在已经登录的微信电脑版里打开返回的 `confirmation_url`，等公众号页面加载完。
+2. 把返回的 `confirmation_url` 发给微信电脑版的「文件传输助手」并点开，等作者页加载完。微信电脑版没有地址栏，作者页也没有复制链接的按钮。
 3. `capture_session`。它扫描 `%USERPROFILE%\AppData\Roaming\Tencent\xwechat` 和 `WeChat`。作者页加载时，微信会把带 `uin` 和 `key` 的请求写进这些目录。
-4. 扫不到时不要从作者页复制链接。作者页没有复制链接的按钮。重新打开 `confirmation_url`，等页面加载完，再 `capture_session`。
+4. 扫不到时不要从作者页复制链接。作者页没有复制链接的按钮。把 `confirmation_url` 再发给「文件传输助手」并点开，等页面加载完，再 `capture_session`。
 5. `session_status` 的 `ready` 为 true 之后，再列历史。
 
 `import_session_url` 只给调用方已经持有的、带 `uin` 和 `key` 的链接。它不是作者页上的操作。
@@ -269,7 +269,7 @@ download_history
   min_reads: 0
 ```
 
-`download_history` 立即返回，例如：
+`download_history` 和单篇保存会同时写 HTML 与 Markdown。`download_history` 立即返回，例如：
 
 ```json
 {

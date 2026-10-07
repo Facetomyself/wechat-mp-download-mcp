@@ -23,9 +23,9 @@ from wechatdownload.urls import KEY_EXPIRED_TEXT, build_home_url, is_collection_
 
 ALLOWED_HOST = "mp.weixin.qq.com"
 MANUAL_STEP = (
-    "在已登录的微信电脑版中打开 confirmation_url，等公众号作者页加载完成后再调用 capture_session。"
-    "作者页没有复制链接的按钮，不要向用户要页面上的 URL。"
-    "扫不到密钥时重新打开确认页并等加载完成，再 capture_session。"
+    "在已登录的微信电脑版里，把 confirmation_url 发给「文件传输助手」并点开，等公众号作者页加载完成后再调用 capture_session。"
+    "微信电脑版没有地址栏，作者页也没有复制链接的按钮。"
+    "扫不到密钥时重新发一次并等加载完成，再 capture_session。"
 )
 VERIFY_FAILED = "扫到的密钥未通过作者页校验。请重新在微信电脑版打开 confirmation_url，等页面加载完成后再 capture_session。"
 
@@ -111,6 +111,7 @@ class App:
         self.jobs: dict[str, Job] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._lock = threading.Lock()
+        self._load_jobs()
 
     def prepare_account(self, text: str) -> dict:
         raw = (text or "").strip()
@@ -138,7 +139,7 @@ class App:
         found = self.scan(roots)
         if not found:
             prompt = self._load_page_prompt(biz)
-            prompt["error"] = "没有扫到密钥。请在微信电脑版打开 confirmation_url，等作者页加载完成后再 capture_session。作者页没有复制链接的按钮。"
+            prompt["error"] = "没有扫到密钥。请把 confirmation_url 发给「文件传输助手」并点开，等作者页加载完成后再 capture_session。"
             prompt["scanned"] = 0
             return prompt
         last_error = VERIFY_FAILED
@@ -450,7 +451,7 @@ class App:
             source="single",
         )
         folder = self.root / "articles" / opened["biz"]
-        written = write_article_files(folder, article, opened["page"], save_markdown=False)
+        written = write_article_files(folder, article, opened["page"], save_markdown=True)
         return str(written[0])
 
     def _start_job(self, kind: str, options: dict) -> dict:
@@ -513,7 +514,8 @@ class App:
             write_manifest(manifest, rows)
             job.manifest_path = str(manifest)
             job.summary = summarize_rows(rows)
-            job.done_urls = [row.url for row in rows if row.action == "download" and row.url]
+            fresh = [row.url for row in rows if row.action == "download" and row.url]
+            job.done_urls = list(dict.fromkeys([*job.done_urls, *fresh]))
             stop = next((row for row in rows if row.reason == "key_expired"), None)
             if stop is not None:
                 job.status = "needs_session"
@@ -669,7 +671,43 @@ class App:
     def _persist_job(self, job: Job) -> None:
         path = self.root / "jobs" / job.id / "job.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(job.public(), ensure_ascii=False, indent=2), encoding="utf-8")
+        payload = job.public()
+        payload["options"] = job.options
+        payload["done_urls"] = job.done_urls
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _load_jobs(self) -> None:
+        folder = self.root / "jobs"
+        if not folder.is_dir():
+            return
+        for path in folder.glob("*/job.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict) or not data.get("job_id"):
+                continue
+            status = str(data.get("status") or "failed")
+            error = str(data.get("error") or "")
+            if status in {"queued", "running"}:
+                status = "failed"
+                error = error or "进程中断，可以 resume_job"
+            options = data.get("options") if isinstance(data.get("options"), dict) else {}
+            done = data.get("done_urls") if isinstance(data.get("done_urls"), list) else []
+            job = Job(
+                id=str(data["job_id"]),
+                kind=str(data.get("kind") or ""),
+                status=status,
+                biz=str(data.get("biz") or ""),
+                options=options,
+                resume_offset=data.get("resume_offset") if isinstance(data.get("resume_offset"), int) else None,
+                manifest_path=str(data.get("manifest_path") or ""),
+                summary=data.get("summary") if isinstance(data.get("summary"), dict) else {},
+                error=error,
+                created_at=str(data.get("created_at") or ""),
+                done_urls=[item for item in done if isinstance(item, str)],
+            )
+            self.jobs[job.id] = job
 
 
 def _date(value: str):

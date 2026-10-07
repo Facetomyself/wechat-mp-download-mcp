@@ -296,9 +296,13 @@ class BizSessionAlbumTests(unittest.TestCase):
             skip.mkdir()
             (keep / "a.txt").write_text("https://mp.weixin.qq.com/s?uin=111&key=realKey&pass_ticket=ttt&x=1", encoding="utf-8")
             (skip / "b.txt").write_text("https://mp.weixin.qq.com/s?uin=222&key=hidden&pass_ticket=hhh&x=1", encoding="utf-8")
+            cache = root / "cache"
+            cache.mkdir()
+            (cache / "c.txt").write_text("https://mp.weixin.qq.com/s?uin=444&key=ab-cd&pass_ticket=ttt&x=1", encoding="utf-8")
+            (keep / "d.bin").write_bytes(b"\x00\x01https://mp.weixin.qq.com/s?uin=333&key=binKey&pass_ticket=ppp&x=1")
             found = scan_credentials([root])
-        self.assertEqual([item.uin for item in found], ["111"])
-        self.assertEqual(credentials_in_text("uin=1&key=k&pass_ticket=p&")[0].key, "k")
+        self.assertEqual({item.uin for item in found}, {"111", "444", "333"})
+        self.assertEqual(credentials_in_text("https://mp.weixin.qq.com/s?uin=1&key=ab-cd&pass_ticket=p&")[0].key, "ab-cd")
 
     def test_homepage_album_is_not_history(self) -> None:
         link = "https://mp.weixin.qq.com/mp/appmsgalbum?__biz=Abcd1234&album_id=99&msgid=1&itemidx=1"

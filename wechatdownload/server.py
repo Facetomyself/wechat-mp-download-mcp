@@ -80,7 +80,7 @@ def _register_agent(mcp: FastMCP, app: App) -> None:
     def mp_fetch(url: str, mode: str = "info", excerpt_chars: int = 600) -> dict:
         return app.fetch(url, mode=mode, excerpt_chars=excerpt_chars)
 
-    @mcp.tool(description="历史。没有已校验会话时只返回确认链接，不发请求。action 为 list 或 download。list 默认 3 页；download 在 max_pages 小于 0 时翻到结束，不保存原始页。")
+    @mcp.tool(description="历史。没有已校验会话时只返回确认链接，不发请求。action 为 list 或 download。list 默认 3 页；download 在 max_pages 小于 0 时翻到结束，同时写 Markdown，不保存原始页。")
     def mp_history(
         action: str = "list",
         max_pages: int = -1,
@@ -109,7 +109,7 @@ def _register_agent(mcp: FastMCP, app: App) -> None:
                 end_date=end_date,
                 min_reads=min_reads,
                 delay_seconds=1,
-                save_markdown=False,
+                save_markdown=True,
                 save_pages=False,
             )
         return {"ok": False, "error": "action 只能是 list 或 download"}

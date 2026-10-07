@@ -8,8 +8,8 @@ from urllib.parse import unquote
 
 from wechatdownload.models import Credential
 
-# 常量里的原样正则。第三个字符类是 a-zA-z，和 4.6 一致。
-URL_RE = re.compile(r"https?://[a-zA-z0-9:/?.&=+%_]+")
+# 4.6 的字符类是 a-zA-z，且不含连字符，密钥会被截断。这里按 URL 安全字符收全。
+URL_RE = re.compile(r"https?://[A-Za-z0-9:/?.&=+%_~-]+")
 UIN_RE = re.compile(r"uin=(.*?)&")
 KEY_RE = re.compile(r"key=(.*?)&")
 TICKET_RE = re.compile(r"pass_ticket=([^&]*)")
@@ -18,13 +18,14 @@ POC_SID_RE = re.compile(r"poc_sid=([^;]+)")
 
 # 常量表只有 skip_dirs 这个名字和「跳过聊天记录、视频、图片文件夹」的说明，
 # 没有目录名字符串。下面这组是按这句话做的剪枝，不是逐字节还原。
+# 只跳过聊天记录和图片视频目录。cache 里会留下作者页请求，不能跳。
+# filestorage 是聊天文件本体，体积大且不是会话来源。
 INFERRED_SKIP_DIRS = {
     "msg",
     "message",
     "video",
     "image",
     "img",
-    "cache",
     "filestorage",
 }
 MEDIA_SUFFIXES = {
@@ -61,9 +62,10 @@ def _decode_token(value: str) -> str:
 def credentials_in_text(text: str, source: str = "", mtime: float = 0) -> list[Credential]:
     found: list[Credential] = []
     seen: set[tuple[str, str, str]] = set()
-    pieces = URL_RE.findall(text or "")
-    if "uin=" in (text or "") and not pieces:
-        pieces = [text]
+    raw = text or ""
+    pieces = URL_RE.findall(raw)
+    if "uin=" in raw and "key=" in raw:
+        pieces.append(raw)
     for piece in pieces:
         sample = piece if piece.endswith("&") else piece + "&"
         uin_match = UIN_RE.search(sample)
@@ -143,7 +145,7 @@ def scan_credentials(roots: list[Path] | None = None, limit: int = 20) -> list[C
             raw = path.read_bytes()
         except OSError:
             continue
-        if b"\x00" in raw[:1024]:
+        if b"uin=" not in raw or b"key=" not in raw:
             continue
         text = raw.decode("utf-8", errors="ignore")
         for cred in credentials_in_text(text, source=str(path), mtime=mtime):

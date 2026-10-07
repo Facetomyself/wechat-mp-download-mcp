@@ -101,8 +101,33 @@ class McpAppTests(unittest.TestCase):
         self.assertTrue(captured["ready"])
         self.assertNotIn(SECRET, json.dumps(captured, ensure_ascii=False))
 
+    def test_restart_reloads_interrupted_job(self) -> None:
+        folder = self.root / "jobs" / "abc123"
+        folder.mkdir(parents=True)
+        done = ["https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=1&idx=1&sn=a"]
+        payload = {
+            "job_id": "abc123",
+            "kind": "album",
+            "status": "running",
+            "biz": "Abcd1234",
+            "resume_offset": None,
+            "manifest_path": "",
+            "summary": {},
+            "error": "",
+            "created_at": "2026-10-07T00:00:00",
+            "options": {"url": "https://mp.weixin.qq.com/mp/appmsgalbum?__biz=Abcd1234&album_id=9"},
+            "done_urls": done,
+        }
+        (folder / "job.json").write_text(json.dumps(payload), encoding="utf-8")
+        restored = App(self.root, transport=self.transport, scan=self._scan)
+        status = restored.job_status("abc123")
+        self.assertEqual(status["status"], "failed")
+        self.assertIn("resume_job", status["error"])
+        self.assertEqual(restored.jobs["abc123"].done_urls, done)
+
     def test_author_page_does_not_ask_for_a_copied_url(self) -> None:
         prepared = self.app.prepare_account("https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=1&idx=1")
+        self.assertIn("文件传输助手", prepared["manual_step"])
         self.assertIn("没有复制链接的按钮", prepared["manual_step"])
         self.assertNotIn("import_session_url", prepared["manual_step"])
         self.app.scan = lambda roots=None: []
@@ -173,6 +198,7 @@ class McpAppTests(unittest.TestCase):
         saved = self.app.download_one(ARTICLE)
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["title"], "甲")
+        self.assertTrue(Path(saved["saved_path"]).with_suffix(".md").is_file())
         self.assertFalse(self.app.session_status()["ready"])
         self.assertNotIn(SECRET, json.dumps(saved, ensure_ascii=False))
 

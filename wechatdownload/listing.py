@@ -14,6 +14,24 @@ class ParseError(ValueError):
     pass
 
 
+# RSSHub wechat-mp showTypeMap。只命名，默认不过滤。
+SHOW_TYPE_NAMES = {
+    0: "article",
+    5: "video",
+    6: "music",
+    7: "audio",
+    8: "image",
+    10: "text",
+    17: "short",
+}
+
+
+def show_type_name(value: int | None) -> str:
+    if value is None:
+        return ""
+    return SHOW_TYPE_NAMES.get(value, "")
+
+
 def parse_getmsg_legacy(body: str) -> list[dict]:
     """按 4.6 的字符串切片取出 general_msg_list，再 json.loads。
 

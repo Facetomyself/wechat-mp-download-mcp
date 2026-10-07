@@ -12,7 +12,7 @@ from wechatdownload.article import parse_like_num, select_article_html, write_ar
 from wechatdownload.biz import extract_biz, extract_biz_legacy
 from wechatdownload.client import CrawlOptions, HistoryCrawler
 from wechatdownload.filters import decide_article
-from wechatdownload.listing import diff_parsers, flatten_messages, parse_getmsg, parse_getmsg_legacy
+from wechatdownload.listing import diff_parsers, flatten_messages, parse_getmsg, parse_getmsg_legacy, show_type_name
 from wechatdownload.listing import ParseError
 from wechatdownload.models import ArticleRef
 from wechatdownload.session import credentials_in_text, scan_credentials
@@ -265,6 +265,15 @@ class EngineTests(unittest.TestCase):
         self.assertIn("sn=sss", found[0].url)
         self.assertEqual(found[0].published_at, 1700000000)
         self.assertIs(can_continue, False)
+        single, single_continue = parse_album_response(
+            compact({"getalbum_resp": {"continue_flag": 1, "reverse_continue_flag": "0", "article_list": {"title": "单条", "url": "https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=1&idx=1&sn=one"}}}),
+            reverse=True,
+        )
+        self.assertEqual([item.title for item in single], ["单条"])
+        self.assertIs(single_continue, False)
+        self.assertEqual(show_type_name(8), "image")
+        self.assertEqual(show_type_name(0), "article")
+        self.assertEqual(show_type_name(None), "")
         article = ArticleRef("图片页", url, 1700000000, 1, 1, "main")
         with tempfile.TemporaryDirectory() as folder:
             written = write_article_files(Path(folder), article, page, save_markdown=True)

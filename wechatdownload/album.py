@@ -38,7 +38,7 @@ def find_valid_params(text: str) -> dict[str, str]:
     return {"album_id": album_id, "msgid": msgid, "itemidx": itemidx, "__biz": biz}
 
 
-def parse_album_response(body: str) -> tuple[list[ArticleRef], bool | None]:
+def parse_album_response(body: str, *, reverse: bool = False) -> tuple[list[ArticleRef], bool | None]:
     try:
         data = json.loads(body)
     except json.JSONDecodeError as exc:
@@ -51,13 +51,11 @@ def parse_album_response(body: str) -> tuple[list[ArticleRef], bool | None]:
             resp = json.loads(resp)
         except json.JSONDecodeError as exc:
             raise AlbumError(f"合集下载失败: {exc}") from exc
-    if not isinstance(resp, dict) and isinstance(data.get("article_list"), list):
+    if not isinstance(resp, dict) and isinstance(data.get("article_list"), (list, dict)):
         resp = data
     if not isinstance(resp, dict):
         raise AlbumError("合集下载失败")
-    raw_list = resp.get("article_list") or []
-    if not isinstance(raw_list, list):
-        raise AlbumError("合集下载失败")
+    raw_list = _article_items(resp.get("article_list"))
     articles: list[ArticleRef] = []
     for item in raw_list:
         if not isinstance(item, dict):
@@ -73,16 +71,30 @@ def parse_album_response(body: str) -> tuple[list[ArticleRef], bool | None]:
                 copyright_stat=as_int(item.get("copyright_stat")),
                 copyright_type=as_int(item.get("copyright_type")),
                 source="album",
+                item_show_type=as_int(item.get("item_show_type")),
                 msg_id=str(item.get("msgid") or item.get("msg_id") or ""),
                 item_idx=str(item.get("itemidx") or item.get("item_idx") or ""),
             )
         )
-    flag = resp.get("continue_flag")
+    return articles, _continue_flag(resp, reverse)
+
+
+def _article_items(raw: object) -> list[dict]:
+    """getalbum 的 article_list 多数是数组，翻到尾页时也可能是单个对象。"""
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    if isinstance(raw, dict):
+        return [raw]
+    return []
+
+
+def _continue_flag(resp: dict, reverse: bool) -> bool | None:
+    flag = resp.get("reverse_continue_flag") if reverse else resp.get("continue_flag")
+    if flag is None and reverse:
+        flag = resp.get("continue_flag")
     if flag is None:
-        can_continue = None
-    else:
-        can_continue = str(flag) not in {"0", "false", "False"}
-    return articles, can_continue
+        return None
+    return str(flag) not in {"0", "false", "False"}
 
 
 def album_links_in_html(page: str) -> list[str]:
@@ -149,7 +161,7 @@ def crawl_album(
             count=count,
             reverse=reverse,
         )
-        articles, can_continue = parse_album_response(get_text(url))
+        articles, can_continue = parse_album_response(get_text(url), reverse=reverse)
         pages += 1
         fresh = 0
         for article in articles:

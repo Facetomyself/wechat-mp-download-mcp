@@ -326,6 +326,9 @@ def _blocks(node: _Node) -> list[str]:
     if tag in MEDIA_TAGS or tag.startswith("mp-common-"):
         card = _media(node)
         return [card] if card else []
+    if "code-snippet__fix" in node.attrs.get("class", ""):
+        block = _snippet_block(node)
+        return [block] if block else []
     return [*_style_images(node), *_flow(node.children)]
 
 
@@ -633,6 +636,37 @@ def _pre_text(node: _Node) -> str:
     while lines and not lines[-1].strip():
         lines.pop()
     return "\n".join(lines)
+
+
+def _snippet_block(node: _Node) -> str:
+    """微信编辑器代码块：去掉行号后，把每个 code 的文本拼成一个 fence。"""
+    lang = ""
+    chunks: list[str] = []
+
+    def walk(current: _Node) -> None:
+        nonlocal lang
+        if _dropped(current):
+            return
+        if current.tag in {"pre", "code"}:
+            declared = (current.attrs.get("data-lang") or "").strip().lower()
+            if declared:
+                lang = LANG_ALIAS.get(declared, declared)
+        if current.tag == "code":
+            text = _pre_text(current)
+            if text:
+                chunks.append(text)
+            return
+        for child in current.children:
+            if isinstance(child, _Node):
+                walk(child)
+
+    walk(node)
+    if not lang:
+        lang = _code_lang(node)
+    code = "\n".join(chunks).strip("\n")
+    if not code:
+        return ""
+    return _fence(code, lang)
 
 
 def _code_lang(node: _Node) -> str:

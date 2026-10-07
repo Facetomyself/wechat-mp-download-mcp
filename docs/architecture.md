@@ -48,6 +48,6 @@ wechatdownload.app
 
 主机名必须是 `mp.weixin.qq.com`。单篇写到 `articles/<biz>/`。历史和合集任务写到 `jobs/<job_id>/`，清单是 UTF-8 BOM 的 CSV。`diagnose_page` 的 `path` 必须位于数据目录内。
 
-`save_markdown` 只转 `#js_content`（没有该节点时转 body）。输出保留标题层级、段落、列表、表格、引用、删除线、代码块、公式、`data-src` 图片、背景图，以及语音、视频、音乐卡片。去掉页面壳、代码块行号和 `counter(line)` 泄漏。不依赖 `html2text`。参考了 jackwener/wechat-article-to-markdown 的代码块预处理，以及 wechat-article/wechat-article-exporter 的懒加载图片和页面噪声节点。历史展开会递归副条，链接字段接受 `content_url`、`url`、`link`、`source_url`。合集 `getalbum_resp` 可以是对象或字符串。
+`save_markdown` 只转 `#js_content`（没有该节点时转 body）。输出保留标题层级、段落、列表、表格、引用、删除线、代码块、公式、`data-src` 图片、背景图，以及语音、视频、音乐卡片。去掉页面壳、代码块行号和 `counter(line)` 泄漏。不依赖 `html2text`。参考了 jackwener/wechat-article-to-markdown 的代码块预处理，以及 wechat-article/wechat-article-exporter 的懒加载图片和页面噪声节点。历史展开会递归副条，链接字段接受 `content_url`、`url`、`link`、`source_url`。合集 `getalbum_resp` 可以是对象或字符串，`article_list` 可以是数组或单条对象；倒序翻页看 `reverse_continue_flag`。历史 `item_show_type` 只命名（0 图文、5 视频、6 音乐、7 音频、8 图片、10 文本、17 短内容），默认不过滤。代码块按 `.code-snippet__fix` 整段抽取。
 
 工具结果、清单和任务 JSON 不包含密钥原文。

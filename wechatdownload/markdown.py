@@ -30,15 +30,19 @@ SKIP_TAGS = {
     "script",
     "style",
     "svg",
-    "iframe",
     "noscript",
     "canvas",
-    "video",
-    "audio",
     "button",
     "form",
     "textarea",
     "select",
+}
+MEDIA_TAGS = {
+    "iframe",
+    "video",
+    "audio",
+    "embed",
+    "source",
     "mpvoice",
     "mpvideosnap",
     "qqmusic",
@@ -273,8 +277,17 @@ def _title_from_tree(root: _Node) -> str:
 
 
 def _dropped(node: _Node) -> bool:
-    classes = node.attrs.get("class", "")
-    if "code-snippet__line-index" in classes or "line-numbers" in classes.split():
+    if node.attrs.get("id") in {
+        "js_pc_qr_code",
+        "js_top_ad_area",
+        "content_bottom_area",
+        "wx_stream_article_slide_tip",
+    }:
+        return True
+    classes = set(node.attrs.get("class", "").split())
+    if "code-snippet__line-index" in node.attrs.get("class", "") or "line-numbers" in classes:
+        return True
+    if classes.intersection({"qr_code_pc", "reward_area"}):
         return True
     style = (node.attrs.get("style") or "").replace(" ", "")
     return "display:none" in style
@@ -310,7 +323,10 @@ def _blocks(node: _Node) -> list[str]:
         return [table] if table else []
     if tag == "figure":
         return _figure(node)
-    return _flow(node.children)
+    if tag in MEDIA_TAGS or tag.startswith("mp-common-"):
+        card = _media(node)
+        return [card] if card else []
+    return [*_style_images(node), *_flow(node.children)]
 
 
 def _flow(children: list[_Node | str]) -> list[str]:
@@ -344,10 +360,17 @@ def _inline(child: _Node | str) -> str:
         return re.sub(r"[ \t]+", " ", text)
     if _dropped(child) or child.tag in SKIP_TAGS:
         return ""
+    if child.tag in MEDIA_TAGS or child.tag.startswith("mp-common-"):
+        return _media(child)
+    rendered = _katex(child)
+    if rendered:
+        return rendered
     if child.tag == "br":
         return "\n"
     if child.tag == "img":
         return _image(child)
+    if child.tag in {"s", "del", "strike"}:
+        return _wrap_emphasis(_join_inline(child.children), "~~")
     if child.tag == "code":
         return _ticks(_code_text(child))
     if child.tag in ("strong", "b"):
@@ -400,13 +423,166 @@ def _link(node: _Node) -> str:
     return f"[{label or href}]({href})"
 
 
+def _image_src(attrs: dict[str, str]) -> str:
+    src = _absolute(attrs.get("src") or "")
+    data = _absolute(attrs.get("data-src") or attrs.get("data-original") or attrs.get("data-backsrc") or "")
+    if _placeholder_src(src) and data:
+        return data
+    return src or data
+
+
+def _absolute(url: str) -> str:
+    text = url.strip()
+    if text.startswith("//"):
+        return "https:" + text
+    return text
+
+
+def _placeholder_src(url: str) -> bool:
+    lowered = url.lower()
+    return (
+        not url
+        or lowered.startswith("data:")
+        or lowered.startswith("about:")
+        or "blank.gif" in lowered
+        or "transparent.gif" in lowered
+        or lowered.endswith("/0")
+        or "/0?" in lowered
+    )
+
+
 def _image(node: _Node) -> str:
-    src = (node.attrs.get("src") or node.attrs.get("data-src") or "").strip()
+    src = _image_src(node.attrs)
     if not src:
         return ""
     alt = (node.attrs.get("alt") or "").replace("\n", " ").strip()
     alt = alt.replace("[", "\\[").replace("]", "\\]")
     return f"![{alt}]({src})"
+
+
+def _media(node: _Node) -> str:
+    attrs = node.attrs
+    tag = node.tag
+    if tag == "mpvoice":
+        file_id = (attrs.get("voice_encode_fileid") or "").strip()
+        url = _http(attrs.get("src") or "")
+        if not url and re.fullmatch(r"[\w-]{6,}", file_id):
+            url = f"https://res.wx.qq.com/voice/getvoice?mediaid={file_id}"
+        return _card("语音", _label(attrs, "name", "title") or "语音", url)
+    if tag == "qqmusic":
+        name = _label(attrs, "music_name", "title") or "音乐"
+        singer = _label(attrs, "singer")
+        title = f"{name} - {singer}" if singer else name
+        return _card("音乐", title, _http(attrs.get("audiourl") or attrs.get("albumurl") or ""))
+    if tag in {"audio", "mp-common-mpaudio"}:
+        return _card("音频", _label(attrs, "title", "name", "data-desc") or "音频", _media_url(node))
+    if tag in {"mp-common-miniprogram"}:
+        return _card("小程序", _label(attrs, "data-miniprogram-title", "data-miniprogram-nickname") or "小程序", "")
+    if tag == "mp-common-poi":
+        return _card("位置", _label(attrs, "data-name", "data-address") or "位置", _http(attrs.get("data-url") or ""))
+    if tag.startswith("mp-common-"):
+        kind = {"profile": "公众号", "product": "商品"}.get(tag.removeprefix("mp-common-"), "卡片")
+        return _card(kind, _label(attrs, "data-nickname", "data-name", "title", "data-desc") or kind, _media_url(node))
+    url = _media_url(node)
+    if tag == "iframe" and not url:
+        return ""
+    kind = "音频" if tag == "audio" else "视频"
+    title = _label(attrs, "data-desc", "title", "alt") or kind
+    if not url and title == kind:
+        return ""
+    return _card(kind, title, url)
+
+
+def _media_url(node: _Node) -> str:
+    url = _http(node.attrs.get("data-src") or node.attrs.get("src") or node.attrs.get("data-url") or "")
+    if url:
+        return url
+    for child in node.children:
+        if isinstance(child, _Node) and child.tag == "source":
+            found = _http(child.attrs.get("src") or "")
+            if found:
+                return found
+    return ""
+
+
+def _label(attrs: dict[str, str], *keys: str) -> str:
+    for key in keys:
+        value = (attrs.get(key) or "").strip()
+        if value and not value.startswith("http"):
+            return value
+    return ""
+
+
+def _http(url: str) -> str:
+    text = _absolute(url)
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    return ""
+
+
+def _card(kind: str, title: str, url: str) -> str:
+    label = title.replace("\n", " ").strip() or kind
+    if url:
+        return f"[{kind}：{label}]({url})"
+    return f"{kind}：{label}"
+
+
+def _katex(node: _Node) -> str:
+    classes = node.attrs.get("class", "")
+    if "katex" not in classes.split():
+        return ""
+    tex = _annotation(node).strip()
+    if not tex:
+        return ""
+    if "katex-display" in classes.split():
+        return f"$$\n{tex}\n$$"
+    return f"${tex}$"
+
+
+def _annotation(node: _Node) -> str:
+    parts: list[str] = []
+
+    def walk(current: _Node) -> None:
+        if current.tag == "annotation":
+            encoding = (current.attrs.get("encoding") or "").lower()
+            if not encoding or "tex" in encoding:
+                parts.append("".join(child for child in current.children if isinstance(child, str)))
+            return
+        for child in current.children:
+            if isinstance(child, _Node):
+                walk(child)
+
+    walk(node)
+    return "".join(parts)
+
+
+_BACKGROUND_URL = re.compile(r"url\(\s*['\"]?((?://|https?:)[^)'\"\s]+)", re.I)
+
+
+def _style_images(node: _Node) -> list[str]:
+    style = node.attrs.get("style") or ""
+    if "url(" not in style:
+        return []
+    existing: set[str] = set()
+
+    def walk(current: _Node) -> None:
+        for child in current.children:
+            if not isinstance(child, _Node):
+                continue
+            if child.tag == "img":
+                src = _image_src(child.attrs)
+                if src:
+                    existing.add(src)
+            walk(child)
+
+    walk(node)
+    images: list[str] = []
+    for match in _BACKGROUND_URL.finditer(style):
+        url = _absolute(match.group(1))
+        if not _http(url) or url in existing or url in images:
+            continue
+        images.append(url)
+    return [f"![]({url})" for url in images]
 
 
 def _code_text(node: _Node) -> str:
@@ -451,7 +627,7 @@ def _pre_text(node: _Node) -> str:
 
     walk(node)
     text = "".join(parts).replace("\r\n", "\n").replace("\r", "\n")
-    lines = text.split("\n")
+    lines = [line for line in text.split("\n") if not re.match(r"^[ce]?ounter\(line", line.strip())]
     while lines and not lines[0].strip():
         lines.pop(0)
     while lines and not lines[-1].strip():

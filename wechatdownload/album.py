@@ -46,6 +46,13 @@ def parse_album_response(body: str) -> tuple[list[ArticleRef], bool | None]:
     if not isinstance(data, dict):
         raise AlbumError("合集下载失败")
     resp = data.get("getalbum_resp")
+    if isinstance(resp, str) and resp.strip():
+        try:
+            resp = json.loads(resp)
+        except json.JSONDecodeError as exc:
+            raise AlbumError(f"合集下载失败: {exc}") from exc
+    if not isinstance(resp, dict) and isinstance(data.get("article_list"), list):
+        resp = data
     if not isinstance(resp, dict):
         raise AlbumError("合集下载失败")
     raw_list = resp.get("article_list") or []
@@ -55,17 +62,19 @@ def parse_album_response(body: str) -> tuple[list[ArticleRef], bool | None]:
     for item in raw_list:
         if not isinstance(item, dict):
             continue
-        published = as_int(item.get("create_time") or item.get("datetime"))
+        published = as_int(item.get("create_time") or item.get("datetime") or item.get("publish_time"))
         articles.append(
             ArticleRef(
                 title=str(item.get("title") or ""),
-                url=normalize_content_url(str(item.get("url") or item.get("content_url") or "")),
+                url=normalize_content_url(
+                    str(item.get("url") or item.get("content_url") or item.get("link") or "")
+                ),
                 published_at=published,
                 copyright_stat=as_int(item.get("copyright_stat")),
                 copyright_type=as_int(item.get("copyright_type")),
                 source="album",
-                msg_id=str(item.get("msgid") or ""),
-                item_idx=str(item.get("itemidx") or ""),
+                msg_id=str(item.get("msgid") or item.get("msg_id") or ""),
+                item_idx=str(item.get("itemidx") or item.get("item_idx") or ""),
             )
         )
     flag = resp.get("continue_flag")

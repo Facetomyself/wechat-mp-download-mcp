@@ -71,6 +71,32 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn("![](https://mmbiz.qpic.cn/a.jpg)", text)
         self.assertNotIn("<img", text)
 
+    def test_lazy_media_math_and_background(self) -> None:
+        page = """<html><head><meta property="og:title" content="卡片"></head><body>
+        <div id="js_content">
+          <img src="data:image/gif;base64,AAAA" data-src="https://mmbiz.qpic.cn/real.png">
+          <section style="background-image:url(https://mmbiz.qpic.cn/bg.png)"><span>配图</span></section>
+          <mpvoice name="开机说明" voice_encode_fileid="abcdef123456"></mpvoice>
+          <iframe data-src="https://v.qq.com/txp/iframe/player.html"></iframe>
+          <qqmusic music_name="夜曲" singer="周杰伦" audiourl="https://res.wx.qq.com/a.mp3"></qqmusic>
+          <span class="katex"><span class="katex-html">E</span><annotation encoding="application/x-tex">E=mc^2</annotation></span>
+          <p><del>旧结论</del></p>
+          <section class="code-snippet__fix"><ul class="code-snippet__line-index"><li>1</li></ul>
+            <pre class="code-snippet__python" data-lang="python"><code><span>counter(line)</span><br><span class="code-snippet__keyword">print</span><span>(1)</span></code></pre>
+          </section>
+        </div></body></html>"""
+        text = html_to_markdown(page)
+        self.assertIn("![](https://mmbiz.qpic.cn/real.png)", text)
+        self.assertIn("![](https://mmbiz.qpic.cn/bg.png)", text)
+        self.assertIn("[语音：开机说明](https://res.wx.qq.com/voice/getvoice?mediaid=abcdef123456)", text)
+        self.assertIn("[视频：视频](https://v.qq.com/txp/iframe/player.html)", text)
+        self.assertIn("[音乐：夜曲 - 周杰伦](https://res.wx.qq.com/a.mp3)", text)
+        self.assertIn("$E=mc^2$", text)
+        self.assertNotIn("katex-html", text)
+        self.assertIn("~~旧结论~~", text)
+        self.assertIn("```python\nprint(1)\n```", text)
+        self.assertNotIn("- 1", text)
+
 
 if __name__ == "__main__":
     unittest.main()

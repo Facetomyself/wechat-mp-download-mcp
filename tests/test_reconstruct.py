@@ -7,7 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from wechatdownload.album import crawl_album
+from wechatdownload.album import crawl_album, parse_album_response
 from wechatdownload.article import parse_like_num, select_article_html, write_article_files
 from wechatdownload.biz import extract_biz, extract_biz_legacy
 from wechatdownload.client import CrawlOptions, HistoryCrawler
@@ -81,6 +81,15 @@ class ListingTests(unittest.TestCase):
         self.assertTrue(diff.can_continue)
         articles = flatten_messages(parse_getmsg(body).items)
         self.assertEqual([item.title for item in articles], ["主条", "副条"])
+        nested = {
+            "title": "外层",
+            "link": "https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=2&idx=1&sn=ooo",
+            "multi_app_msg_item_list": [
+                {"title": "内层", "content_url": "https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=3&idx=1&sn=iii"}
+            ],
+        }
+        nested_titles = [item.title for item in flatten_messages([message("主条", raw_url, multi=[nested])])]
+        self.assertEqual(nested_titles, ["主条", "外层", "内层"])
         self.assertEqual(
             articles[0].url,
             "https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=100&idx=1&sn=aaa",
@@ -233,6 +242,29 @@ class EngineTests(unittest.TestCase):
         page, kind = select_article_html(picture)
         self.assertEqual(kind, "picture")
         self.assertIn("mmbiz.qpic.cn/a.jpg", page)
+        album_body = compact(
+            {
+                "getalbum_resp": compact(
+                    {
+                        "continue_flag": "0",
+                        "article_list": [
+                            {
+                                "title": "别名",
+                                "link": "https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=9&idx=1&sn=sss",
+                                "msg_id": "9",
+                                "item_idx": "1",
+                                "publish_time": 1700000000,
+                            }
+                        ],
+                    }
+                )
+            }
+        )
+        found, can_continue = parse_album_response(album_body)
+        self.assertEqual(found[0].title, "别名")
+        self.assertIn("sn=sss", found[0].url)
+        self.assertEqual(found[0].published_at, 1700000000)
+        self.assertIs(can_continue, False)
         article = ArticleRef("图片页", url, 1700000000, 1, 1, "main")
         with tempfile.TemporaryDirectory() as folder:
             written = write_article_files(Path(folder), article, page, save_markdown=True)

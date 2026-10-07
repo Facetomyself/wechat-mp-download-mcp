@@ -106,10 +106,18 @@ def parse_getmsg(body: str) -> HistoryPage:
     )
 
 
+def _content_url(node: dict) -> str:
+    for key in ("content_url", "url", "link", "source_url"):
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
 def _article_from_node(node: dict, source: str, published_at: int | None, msg_id: str) -> ArticleRef:
     return ArticleRef(
         title=str(node.get("title") or ""),
-        url=normalize_content_url(str(node.get("content_url") or "")),
+        url=normalize_content_url(_content_url(node)),
         published_at=published_at,
         copyright_stat=as_int(node.get("copyright_stat")),
         copyright_type=as_int(node.get("copyright_type")),
@@ -131,19 +139,23 @@ def flatten_message(message: dict) -> list[ArticleRef]:
     comm = message.get("comm_msg_info") if isinstance(message.get("comm_msg_info"), dict) else {}
     published_at = as_int(comm.get("datetime"))
     msg_id = str(comm.get("id") or "")
-    nodes: list[tuple[str, dict]] = [("main", ext)]
-    for key, source in (("multi_app_msg_item_list", "multi"), ("app_msg_ext_info_list", "ext_list")):
-        children = ext.get(key) or []
-        if isinstance(children, list):
-            nodes.extend((source, child) for child in children if isinstance(child, dict))
     articles: list[ArticleRef] = []
     seen: set[str] = set()
-    for source, node in nodes:
+
+    def walk(node: dict, source: str) -> None:
         article = _article_from_node(node, source, published_at, msg_id)
-        if article.identity in seen:
-            continue
-        seen.add(article.identity)
-        articles.append(article)
+        if article.identity not in seen:
+            seen.add(article.identity)
+            articles.append(article)
+        for key, child_source in (("multi_app_msg_item_list", "multi"), ("app_msg_ext_info_list", "ext_list")):
+            children = node.get(key) or []
+            if not isinstance(children, list):
+                continue
+            for child in children:
+                if isinstance(child, dict):
+                    walk(child, child_source)
+
+    walk(ext, "main")
     return articles
 
 

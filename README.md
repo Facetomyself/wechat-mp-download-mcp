@@ -26,7 +26,7 @@
 
 ## 安装
 
-Python 3.10 或更高。下载、列表和对照解析只用标准库。MCP 服务需要 `mcp>=1.28`。Markdown 可选：安装了 `html2text` 就用它，否则去掉标签。
+Python 3.10 或更高。下载、列表、对照解析和 Markdown 都只用标准库。MCP 服务需要 `mcp>=1.28`。Markdown 只转 `#js_content`（没有则转 body）：保留标题、列表、表格、引用、代码块，图片用 `data-src`。不转页面壳。
 
 ```text
 pip install -e .

@@ -28,7 +28,7 @@ wechatdownload.app
 
 `list_album` 和 `download_album` 不调用 `require()`。已校验会话存在时带上其中的 `uin` 和 `key`，否则用空凭证请求公开合集。历史恢复仍要会话；合集恢复不要求。
 
-默认工具面是 `agent`：`mp_session`、`mp_fetch`、`mp_history`、`mp_job`、`mp_diagnose`。`WECHAT_MP_TOOLSET=full` 才注册 14 个工具。服务启动不扫描微信目录，也不访问网络。`mp_fetch` 的摘录从 `js_content` 起截取有限片段再去标签，不把整页交给 `html2text`。工具结果不返回 HTML。历史任务默认不把 getmsg 原文落盘。
+默认工具面是 `agent`：`mp_session`、`mp_fetch`、`mp_history`、`mp_job`、`mp_diagnose`。`WECHAT_MP_TOOLSET=full` 才注册 14 个工具。服务启动不扫描微信目录，也不访问网络。`mp_fetch` 的摘录从 `js_content` 起截取有限片段再去标签，不把整页交给 Markdown 转换。工具结果不返回 HTML。历史任务默认不把 getmsg 原文落盘。
 
 ## 任务
 
@@ -47,5 +47,7 @@ wechatdownload.app
 ## 保存
 
 主机名必须是 `mp.weixin.qq.com`。单篇写到 `articles/<biz>/`。历史和合集任务写到 `jobs/<job_id>/`，清单是 UTF-8 BOM 的 CSV。`diagnose_page` 的 `path` 必须位于数据目录内。
+
+`save_markdown` 只转 `#js_content`（没有该节点时转 body）。输出保留标题层级、段落、列表、表格、引用、代码块和 `data-src` 图片，去掉页面壳与代码块窗口按钮。不依赖 `html2text`。
 
 工具结果、清单和任务 JSON 不包含密钥原文。

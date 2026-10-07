@@ -57,7 +57,15 @@ def remove_special_characters(text: str) -> str:
 
 def delete_md_irrelevant_information(text: str) -> str:
     kept = []
+    in_fence = False
     for line in (text or "").splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            kept.append(line)
+            continue
+        if in_fence:
+            kept.append(line)
+            continue
         if any(piece in line for piece in IRRELEVANT):
             continue
         kept.append(line)
@@ -65,18 +73,9 @@ def delete_md_irrelevant_information(text: str) -> str:
 
 
 def html_to_markdown(page: str) -> str:
-    try:
-        import html2text
-    except ImportError:
-        text = re.sub(r"<script\b[^>]*>.*?</script>", " ", page or "", flags=re.I | re.S)
-        text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.I | re.S)
-        text = re.sub(r"<[^>]+>", " ", text)
-        text = html.unescape(text)
-    else:
-        converter = html2text.HTML2Text()
-        converter.ignore_images = False
-        converter.body_width = 0
-        text = converter.handle(page or "")
+    from wechatdownload.markdown import render_article_markdown
+
+    text = render_article_markdown(page or "", title=extract_title(page or ""))
     return delete_md_irrelevant_information(text)
 
 
@@ -86,7 +85,7 @@ _TAG = re.compile(r"<[^>]+>")
 
 
 def excerpt_text(page: str, limit: int = 600) -> str:
-    """从正文起点取有限片段，转成纯文本。不把整页交给 html2text。"""
+    """从正文起点取有限片段，转成纯文本。不把整页交给 Markdown 转换。"""
     size = max(0, min(int(limit or 0), 2000))
     if size == 0:
         return ""

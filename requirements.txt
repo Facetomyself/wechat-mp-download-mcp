@@ -1,3 +1,2 @@
-# 下载、列表和对照解析只用标准库。
-# 原程序的 markdown 转换依赖 html2text；未安装时用标签剥离代替。
-# html2text
+# 下载、列表、对照解析和 Markdown 只用标准库。
+# mcp 由 pyproject.toml 声明，只在启动 MCP 服务时需要。

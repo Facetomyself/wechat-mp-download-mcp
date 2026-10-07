@@ -101,6 +101,18 @@ class McpAppTests(unittest.TestCase):
         self.assertTrue(captured["ready"])
         self.assertNotIn(SECRET, json.dumps(captured, ensure_ascii=False))
 
+    def test_author_page_does_not_ask_for_a_copied_url(self) -> None:
+        prepared = self.app.prepare_account("https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=1&idx=1")
+        self.assertIn("没有复制链接的按钮", prepared["manual_step"])
+        self.assertNotIn("import_session_url", prepared["manual_step"])
+        self.app.scan = lambda roots=None: []
+        missed = self.app.capture_session()
+        self.assertFalse(missed["ok"])
+        self.assertNotIn("import_session_url", missed["error"])
+        self.assertNotIn("复制出", missed["error"])
+        self.assertIn("confirmation_url", missed)
+        self.assertIn("Abcd1234", missed["confirmation_url"])
+
     def test_expired_import_does_not_become_ready(self) -> None:
         self.app.prepare_account("https://mp.weixin.qq.com/s?__biz=Abcd1234&mid=1")
         result = self.app.import_session_url(

@@ -100,9 +100,11 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 
 1. `prepare_account`，传入文章链接、合集链接，或含 `__biz` 的文本。
 2. 在已经登录的微信电脑版里打开返回的 `confirmation_url`，等公众号页面加载完。
-3. `capture_session`。它扫描 `%USERPROFILE%\AppData\Roaming\Tencent\xwechat` 和 `WeChat`。
-4. 目录里扫不到时，把微信里复制出的、带 `uin` 和 `key` 的 `mp.weixin.qq.com` 链接交给 `import_session_url`。
+3. `capture_session`。它扫描 `%USERPROFILE%\AppData\Roaming\Tencent\xwechat` 和 `WeChat`。作者页加载时，微信会把带 `uin` 和 `key` 的请求写进这些目录。
+4. 扫不到时不要从作者页复制链接。作者页没有复制链接的按钮。重新打开 `confirmation_url`，等页面加载完，再 `capture_session`。
 5. `session_status` 的 `ready` 为 true 之后，再列历史。
+
+`import_session_url` 只给调用方已经持有的、带 `uin` 和 `key` 的链接。它不是作者页上的操作。
 
 `session_status` 只返回这些公开字段：`ready`、`biz`、`uin_hint`、`has_pass_ticket`、`has_poc_token`、`verified`、`verified_at`、`age_seconds`、`source`。
 
@@ -114,7 +116,7 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 
 | 工具 | 作用 |
 | --- | --- |
-| `mp_session` | `action` 为 `status`、`prepare`、`capture`、`import`。`text` 是文章链接或微信里复制的链接 |
+| `mp_session` | `action` 为 `status`、`prepare`、`capture`、`import`。`prepare` 的 `text` 是文章或合集链接。`import` 只接收已经带 `uin` 和 `key` 的链接 |
 | `mp_fetch` | `mode` 为 `info`、`save`、`list`。`info` 不写文件。摘录默认 600 字，最多 2000，只从正文起点取片段，不转换整页。`save` 保存单篇。合集或主页在已有会话时走后台任务，并带回最多 20 个标题；没有会话时只返回确认链接 |
 | `mp_history` | `action` 为 `list` 或 `download`。没有会话时只返回确认链接。`list` 默认 3 页。`download` 在 `max_pages` 小于 0 时翻到结束，间隔 1 秒，不保存 getmsg 原文 |
 | `mp_job` | `action` 为 `status`、`cancel`、`resume`、`export` |
@@ -128,7 +130,7 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 | --- | --- | --- |
 | `prepare_account` | 提取 `__biz`，返回确认链接 | `text` |
 | `capture_session` | 扫描本机微信目录并逐条校验 | `root`，空则用默认目录 |
-| `import_session_url` | 从复制出的链接导入并校验 | `url` |
+| `import_session_url` | 导入调用方已持有的、带 `uin` 和 `key` 的链接。不从作者页复制 | `url` |
 | `session_status` | 会话是否有效 | 无 |
 | `list_history` | 同步列出历史，最多 30 页 | `max_pages` 默认 3 |
 | `download_history` | 后台下载历史 | `max_pages` 为 0 时翻到结束；`delay_seconds` 默认 1；`save_pages` 默认 false |

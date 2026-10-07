@@ -10,7 +10,8 @@ from wechatdownload.app import App, default_data_root
 
 AGENT_INSTRUCTIONS = (
     "微信公众号下载。单篇公开文章不需要会话。"
-    "整号历史和合集在没有已校验会话时只返回确认链接，提示先在微信电脑版打开并等页面加载完成；不要先下载当前页可见的文章。"
+    "整号历史和合集在没有已校验会话时只返回确认链接，提示先在微信电脑版打开并等作者页加载完成；不要先下载当前页可见的文章。"
+    "作者页没有复制链接的按钮，不要让用户从作者页复制 URL。"
     "结果只有标题、路径和短摘录，不含页面 HTML 或密钥。启动时不扫描微信，也不访问网络。"
 )
 AGENT_BODY_LIMIT = 20_000
@@ -62,7 +63,7 @@ def build_server(app: App | None = None, port: int = 4545, toolset: str | None =
 
 
 def _register_agent(mcp: FastMCP, app: App) -> None:
-    @mcp.tool(description="会话。action 为 status、prepare、capture 或 import。text 是文章链接或微信里复制的链接。")
+    @mcp.tool(description="会话。action 为 status、prepare、capture 或 import。prepare 的 text 是文章或合集链接。import 只接收调用方已经持有的、带 uin 和 key 的链接，不要让用户从作者页复制。")
     def mp_session(action: str = "status", text: str = "", root: str = "") -> dict:
         selected = (action or "status").strip().lower()
         if selected == "status":
@@ -142,7 +143,7 @@ def _register_full(mcp: FastMCP, app: App) -> None:
     def capture_session(root: str = "") -> dict:
         return app.capture_session(root)
 
-    @mcp.tool(description="从微信里复制出的 mp.weixin.qq.com 链接导入 uin 和 key。")
+    @mcp.tool(description="导入调用方已经持有的、带 uin 和 key 的 mp.weixin.qq.com 链接。作者页没有复制按钮，不要让用户从作者页复制。")
     def import_session_url(url: str) -> dict:
         return app.import_session_url(url)
 

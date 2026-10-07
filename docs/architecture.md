@@ -20,7 +20,7 @@ wechatdownload.app
 
 `uin`、`key`、`pass_ticket` 由已登录的微信电脑版在打开公众号页时写出。程序不计算这些值。
 
-`prepare_account` 给出确认链接。用户在微信里打开后，`capture_session` 扫描本机 `xwechat` 或 `WeChat` 目录，或由 `import_session_url` 接收复制出的链接。校验请求是 `profile_ext?action=home`。正文里出现「请在微信客户端打开链接」视为密钥失效。
+`prepare_account` 给出确认链接。用户在微信电脑版打开并等作者页加载完后，`capture_session` 扫描本机 `xwechat` 或 `WeChat` 目录。作者页没有复制链接的按钮，不向用户要页面 URL。`import_session_url` 只接收调用方已经持有的、带 `uin` 和 `key` 的链接。校验请求是 `profile_ext?action=home`。正文里出现「请在微信客户端打开链接」视为密钥失效。
 
 `download_one` 不要求已校验会话。它直接请求文章 URL。保存目录优先用会话里的 `biz`，否则用页面里的 `biz`。页面要求在微信内打开、且没有 `js_content` 或 `cdn_url` 时返回失败，不写入文件。
 

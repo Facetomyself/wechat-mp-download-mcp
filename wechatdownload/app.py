@@ -22,7 +22,12 @@ from wechatdownload.store import SessionStore
 from wechatdownload.urls import KEY_EXPIRED_TEXT, build_home_url, is_collection_url, normalize_content_url
 
 ALLOWED_HOST = "mp.weixin.qq.com"
-MANUAL_STEP = "在已登录的微信电脑版中打开 confirmation_url，等公众号页面加载完成后再调用 capture_session。扫描不到时，把微信里复制出的链接交给 import_session_url。"
+MANUAL_STEP = (
+    "在已登录的微信电脑版中打开 confirmation_url，等公众号作者页加载完成后再调用 capture_session。"
+    "作者页没有复制链接的按钮，不要向用户要页面上的 URL。"
+    "扫不到密钥时重新打开确认页并等加载完成，再 capture_session。"
+)
+VERIFY_FAILED = "扫到的密钥未通过作者页校验。请重新在微信电脑版打开 confirmation_url，等页面加载完成后再 capture_session。"
 
 
 def default_data_root() -> Path:
@@ -133,10 +138,10 @@ class App:
         found = self.scan(roots)
         if not found:
             prompt = self._load_page_prompt(biz)
-            prompt["error"] = "没有扫到密钥。请先在微信电脑版打开确认页，等页面加载完成后再试，或使用 import_session_url"
+            prompt["error"] = "没有扫到密钥。请在微信电脑版打开 confirmation_url，等作者页加载完成后再 capture_session。作者页没有复制链接的按钮。"
             prompt["scanned"] = 0
             return prompt
-        last_error = "获取密钥失败...请先在微信打开复制的链接"
+        last_error = VERIFY_FAILED
         for cred in found:
             try:
                 self._verify(biz, cred.uin, cred.key, cred.pass_ticket, cred.poc_token)
@@ -620,7 +625,7 @@ class App:
     def _verify(self, biz: str, uin: str, key: str, pass_ticket: str, poc_token: str) -> None:
         body = self._get(build_home_url(biz, uin, key, pass_ticket, poc_token))
         if KEY_EXPIRED_TEXT in body:
-            raise RuntimeError("获取密钥失败...请先在微信打开复制的链接")
+            raise RuntimeError(VERIFY_FAILED)
 
     def _save_secret(self, biz: str, uin: str, key: str, pass_ticket: str, poc_token: str, source: str) -> None:
         self.store.update(

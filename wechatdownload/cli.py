@@ -139,7 +139,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     url = build_home_url(cred["biz"], cred["uin"], cred["key"], cred["pass_ticket"], cred["poc_token"])
     body = transport.get_text(url)
     if KEY_EXPIRED_TEXT in body:
-        print("获取密钥失败...请先在微信打开复制的链接")
+        print("扫到的密钥未通过作者页校验。请重新在微信电脑版打开确认页，等页面加载完成后再捕获。")
         return 1
     print("获取密钥成功！请点击下载按钮")
     return 0

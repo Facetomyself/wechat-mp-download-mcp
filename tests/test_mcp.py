@@ -142,6 +142,20 @@ class McpAppTests(unittest.TestCase):
         self.assertTrue(saved["ok"])
         self.assertTrue(Path(saved["saved_path"]).is_file())
 
+    def test_missing_session_prompts_to_load_page_before_visible_articles(self) -> None:
+        link = "https://mp.weixin.qq.com/mp/appmsgalbum?__biz=Abcd1234&album_id=99"
+        listed = self.app.list_album(link)
+        started = self.app.download_album(link)
+        history = self.app.download_history(max_pages=1)
+        self.assertFalse(listed["ok"])
+        self.assertFalse(started["ok"])
+        self.assertFalse(history["ok"])
+        self.assertTrue(listed["needs_session"])
+        self.assertIn("不要先下载当前页可见的文章", listed["error"])
+        self.assertIn("confirmation_url", listed)
+        self.assertEqual(self.app.jobs, {})
+        self.assertFalse(self.transport.album)
+
     def test_download_one_public_page_does_not_need_session(self) -> None:
         self.transport.articles[ARTICLE] = HTML
         saved = self.app.download_one(ARTICLE)
@@ -204,10 +218,20 @@ class McpAppTests(unittest.TestCase):
                 }
             }
         )
+        blocked = self.app.list_album(link)
+        self.assertFalse(blocked["ok"])
+        self.assertTrue(blocked["needs_session"])
+        self.assertIn("Abcd1234", blocked["confirmation_url"])
+        self.assertIn("加载完成", blocked["manual_step"])
+        self.assertNotIn("titles", blocked)
+        blocked_save = self.app.fetch(link, mode="save")
+        self.assertFalse(blocked_save["ok"])
+        self.assertNotIn("job_id", blocked_save)
+        self.assertEqual(self.app.jobs, {})
+        self._import()
         listed = self.app.list_album(link)
         self.assertTrue(listed["ok"])
         self.assertEqual(listed["titles"], ["合集文"])
-        self.assertFalse(self.app.session_status()["ready"])
         self.transport.articles[ARTICLE] = HTML
         started = self.app.download_album(link)
         self.assertTrue(started["ok"])

@@ -122,13 +122,7 @@ class App:
         if not biz:
             return {"ok": False, "error": "获取公众号id失败，请检查链接"}
         self.store.update(biz=biz, verified=False)
-        confirmation = build_home_url(biz)
-        return {
-            "ok": True,
-            "biz": biz,
-            "confirmation_url": confirmation,
-            "manual_step": MANUAL_STEP,
-        }
+        return self._load_page_prompt(biz, ok=True)
 
     def capture_session(self, root: str = "") -> dict:
         pending = self.store.load()
@@ -138,11 +132,10 @@ class App:
         roots = [Path(root)] if root else None
         found = self.scan(roots)
         if not found:
-            return {
-                "ok": False,
-                "error": "没有扫到密钥。请在微信中打开确认链接后再试，或使用 import_session_url",
-                "scanned": 0,
-            }
+            prompt = self._load_page_prompt(biz)
+            prompt["error"] = "没有扫到密钥。请先在微信电脑版打开确认页，等页面加载完成后再试，或使用 import_session_url"
+            prompt["scanned"] = 0
+            return prompt
         last_error = "获取密钥失败...请先在微信打开复制的链接"
         for cred in found:
             try:
@@ -185,8 +178,11 @@ class App:
     def list_history(self, **options: object) -> dict:
         try:
             session = self.store.require()
+        except RuntimeError:
+            return self._load_page_prompt()
+        try:
             crawl_options, _ = self._crawl_options(options, download=False)
-        except (RuntimeError, ValueError) as exc:
+        except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         if crawl_options.max_pages is None or crawl_options.max_pages > 30:
             return {"ok": False, "error": "list_history 最多 30 页。更长的历史请用 download_history"}
@@ -216,6 +212,11 @@ class App:
     def list_album(self, url: str, max_pages: int = 5) -> dict:
         try:
             ensure_mp_url(url)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not self.store.public()["ready"]:
+            return self._load_page_prompt(url)
+        try:
             creds = self._album_credentials(url)
             articles = crawl_album(
                 url,
@@ -272,6 +273,8 @@ class App:
         if is_collection_url(cleaned):
             if selected == "info":
                 return {"ok": False, "error": "这是合集或主页，mode 用 list 或 save"}
+            if not self.store.public()["ready"]:
+                return self._load_page_prompt(cleaned)
             preview = self.list_album(cleaned, max_pages=1)
             started = self.download_album(cleaned)
             if preview.get("ok"):
@@ -376,6 +379,28 @@ class App:
         if thread is not None:
             thread.join(timeout)
 
+    def _load_page_prompt(self, url: str = "", *, ok: bool = False) -> dict:
+        """会话还没就绪时只返回确认页。不下载文章页上已经看得见的合集。"""
+        data = self.store.load()
+        biz = extract_biz(url) if url else ""
+        biz = biz or str(data.get("biz") or "")
+        if biz and str(data.get("biz") or "") != biz:
+            self.store.update(biz=biz, verified=False)
+        prompt = {
+            "ok": ok,
+            "needs_session": not ok,
+            "manual_step": MANUAL_STEP,
+        }
+        if ok:
+            prompt["biz"] = biz
+            prompt["confirmation_url"] = build_home_url(biz)
+            return prompt
+        prompt["error"] = "还没有可用会话。请先在微信电脑版打开确认页，等页面加载完成后再下载。不要先下载当前页可见的文章。"
+        if biz:
+            prompt["biz"] = biz
+            prompt["confirmation_url"] = build_home_url(biz)
+        return prompt
+
     def _album_credentials(self, url: str) -> dict[str, str]:
         data = self.store.load()
         biz = extract_biz(url) or str(data.get("biz") or "")
@@ -427,11 +452,14 @@ class App:
         if kind == "history":
             try:
                 session = self.store.require()
-            except RuntimeError as exc:
-                return {"ok": False, "error": str(exc)}
+            except RuntimeError:
+                return self._load_page_prompt()
             biz = str(session["biz"])
         elif kind == "album":
-            biz = self._album_credentials(str(options.get("url") or ""))["biz"]
+            album_url = str(options.get("url") or "")
+            if not self.store.public()["ready"]:
+                return self._load_page_prompt(album_url)
+            biz = self._album_credentials(album_url)["biz"]
         else:
             return {"ok": False, "error": f"未知任务 {kind}"}
         if self._busy():

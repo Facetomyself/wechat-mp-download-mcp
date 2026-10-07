@@ -26,7 +26,7 @@ wechatdownload.app
 
 `list_history` 和 `download_history` 在发请求前调用 `SessionStore.require()`。没有已校验会话时停在工具层，不会发出空的 `getmsg`。空的 `getmsg` 在接口上的表现是 `ret=-3`、`errmsg=no session`。
 
-`list_album` 和 `download_album` 不调用 `require()`。已校验会话存在时带上其中的 `uin` 和 `key`，否则用空凭证请求公开合集。历史恢复仍要会话；合集恢复不要求。
+`list_album` 和 `download_album` 在已校验会话不存在时直接返回确认链接，不请求合集，也不下载文章页上的可见文章。会话就绪后才带上 `uin` 和 `key`。历史恢复和合集恢复都要会话。
 
 默认工具面是 `agent`：`mp_session`、`mp_fetch`、`mp_history`、`mp_job`、`mp_diagnose`。`WECHAT_MP_TOOLSET=full` 才注册 14 个工具。服务启动不扫描微信目录，也不访问网络。`mp_fetch` 的摘录从 `js_content` 起截取有限片段再去标签，不把整页交给 Markdown 转换。工具结果不返回 HTML。历史任务默认不把 getmsg 原文落盘。
 

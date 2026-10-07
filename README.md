@@ -11,8 +11,8 @@
 | 操作 | 要不要已校验会话 | 入口 |
 | --- | --- | --- |
 | 看一篇公开文章的标题和短摘录，或保存 HTML | 不要。页面要求在微信内打开时停下 | 默认 `mp_fetch`；完整面还有 `download_one` |
-| 列出或下载一个公众号的历史 | 要。先在微信电脑版打开确认页 | 默认 `mp_history`；完整面是 `list_history` / `download_history` |
-| 列出或下载公开合集、主页 | 不要。已校验会话存在时会带上它 | 默认 `mp_fetch` 的 `list` / `save`；完整面是 `list_album` / `download_album`。CLI `album` 仍要密钥文件 |
+| 列出或下载一个公众号的历史 | 要。没有会话时只返回确认链接，不发请求 | 默认 `mp_history`；完整面是 `list_history` / `download_history` |
+| 列出或下载合集、主页 | 要。没有会话时只返回确认链接，不下载当前页可见文章 | 默认 `mp_fetch` 的 `list` / `save`；完整面是 `list_album` / `download_album`。CLI `album` 仍要密钥文件 |
 | 对照一页历史响应为什么少文 | 不要会话，要有那一页的响应正文 | 默认 `mp_diagnose`；完整面是 `diagnose_page` |
 
 同一时间只跑一个后台任务。`download_history` 和 `download_album` 立刻返回 `job_id`，再用 `job_status` 看进度。
@@ -96,7 +96,7 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 
 ## 会话
 
-整号历史需要微信在打开公众号页时写出的 `uin`、`key`、`pass_ticket`。公开合集和单篇不需要。每个公众号、每次密钥失效，都做一次：
+整号历史和合集需要微信在打开公众号页时写出的 `uin`、`key`、`pass_ticket`。单篇公开文章不需要。没有已校验会话时，历史和合集只返回确认链接，不下载文章页上已经看得见的内容。每个公众号、每次密钥失效，都做一次：
 
 1. `prepare_account`，传入文章链接、合集链接，或含 `__biz` 的文本。
 2. 在已经登录的微信电脑版里打开返回的 `confirmation_url`，等公众号页面加载完。
@@ -115,8 +115,8 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 | 工具 | 作用 |
 | --- | --- |
 | `mp_session` | `action` 为 `status`、`prepare`、`capture`、`import`。`text` 是文章链接或微信里复制的链接 |
-| `mp_fetch` | `mode` 为 `info`、`save`、`list`。`info` 不写文件。摘录默认 600 字，最多 2000，只从正文起点取片段，不转换整页。`save` 保存单篇；合集或主页改走后台任务，并带回最多 20 个标题 |
-| `mp_history` | `action` 为 `list` 或 `download`。`list` 默认 3 页。`download` 在 `max_pages` 小于 0 时翻到结束，间隔 1 秒，不保存 getmsg 原文 |
+| `mp_fetch` | `mode` 为 `info`、`save`、`list`。`info` 不写文件。摘录默认 600 字，最多 2000，只从正文起点取片段，不转换整页。`save` 保存单篇。合集或主页在已有会话时走后台任务，并带回最多 20 个标题；没有会话时只返回确认链接 |
+| `mp_history` | `action` 为 `list` 或 `download`。没有会话时只返回确认链接。`list` 默认 3 页。`download` 在 `max_pages` 小于 0 时翻到结束，间隔 1 秒，不保存 getmsg 原文 |
 | `mp_job` | `action` 为 `status`、`cancel`、`resume`、`export` |
 | `mp_diagnose` | 同下面的 `diagnose_page`。直接粘贴的 `body` 超过 20000 字会被拒绝，改用数据目录里的 `path` |
 
@@ -133,8 +133,8 @@ python -m wechatdownload.server --transport streamable-http --port 4545
 | `list_history` | 同步列出历史，最多 30 页 | `max_pages` 默认 3 |
 | `download_history` | 后台下载历史 | `max_pages` 为 0 时翻到结束；`delay_seconds` 默认 1；`save_pages` 默认 false |
 | `download_one` | 下载单篇 HTML | `url` |
-| `list_album` | 列出合集或主页，默认最多 5 页。公开合集不需要会话 | `url`、`max_pages` |
-| `download_album` | 后台下载合集或主页 | `url`、`max_pages` 为 0 时翻完、`save_markdown` |
+| `list_album` | 列出合集或主页，默认最多 5 页。没有会话时只返回确认链接 | `url`、`max_pages` |
+| `download_album` | 后台下载合集或主页。没有会话时不开始任务 | `url`、`max_pages` 为 0 时翻完、`save_markdown` |
 | `job_status` | 查看任务。`job_id` 空则看最近一个 | `job_id` |
 | `job_cancel` | 取消后台任务 | `job_id` |
 | `resume_job` | 从上次偏移继续 | `job_id` |
@@ -200,7 +200,7 @@ print(app.download_one("https://mp.weixin.qq.com/s/q3P0nQlIRnybYMyvlVrNFQ"))
 https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzkxMzMxMjM0Ng==&action=getalbum&album_id=4685428779056660482
 ```
 
-公开合集不需要会话。默认工具面：
+没有已校验会话时不要先下这 12 篇。`list`、`save`、`list_album`、`download_album` 会直接返回 `needs_session`、`confirmation_url` 和 `manual_step`，不请求合集。先按案例 3 打开确认页并完成 `capture_session`，再：
 
 ```text
 mp_fetch
@@ -214,9 +214,9 @@ mp_fetch
 
 `list` 返回标题，最多 20 条。`save` 立刻返回 `job_id`，标题在同一次结果和随后的 `mp_job` 里。完整工具面的等价调用是 `list_album` 和 `download_album`。
 
-账号全量历史没有会话时不同：直接请求 `getmsg` 得到 `ret=-3`、`errmsg=no session`。本机 `xwechat` 目录当时也没有扫到可用密钥。
+没有会话就直接请求 `getmsg`，接口是 `ret=-3`、`errmsg=no session`。工具层在发请求前停下。本机 `xwechat` 目录当时也没有扫到可用密钥。
 
-这 12 篇的正文也可以用案例 1 的方式逐篇保存。合集顺序是：
+会话就绪后，这 12 篇的正文也可以用案例 1 的方式逐篇保存。合集顺序是：
 
 1. JSVMP 从入门到入土（序）
 2. JSVMP 从入门到入土（一）

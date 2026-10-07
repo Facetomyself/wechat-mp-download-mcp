@@ -9,7 +9,8 @@ from mcp.server.fastmcp import FastMCP
 from wechatdownload.app import App, default_data_root
 
 AGENT_INSTRUCTIONS = (
-    "微信公众号下载。单篇和公开合集不需要会话；整号历史要先在微信电脑版打开确认链接。"
+    "微信公众号下载。单篇公开文章不需要会话。"
+    "整号历史和合集在没有已校验会话时只返回确认链接，提示先在微信电脑版打开并等页面加载完成；不要先下载当前页可见的文章。"
     "结果只有标题、路径和短摘录，不含页面 HTML 或密钥。启动时不扫描微信，也不访问网络。"
 )
 AGENT_BODY_LIMIT = 20_000
@@ -74,11 +75,11 @@ def _register_agent(mcp: FastMCP, app: App) -> None:
             return app.import_session_url(text)
         return {"ok": False, "error": "action 只能是 status、prepare、capture 或 import"}
 
-    @mcp.tool(description="单篇或公开合集。mode 为 info、save 或 list。只返回标题、路径和短摘录。")
+    @mcp.tool(description="单篇，或已有会话时的合集。mode 为 info、save 或 list。没有会话时合集只返回确认链接，不下载可见文章。")
     def mp_fetch(url: str, mode: str = "info", excerpt_chars: int = 600) -> dict:
         return app.fetch(url, mode=mode, excerpt_chars=excerpt_chars)
 
-    @mcp.tool(description="历史。action 为 list 或 download。list 默认 3 页；download 在 max_pages 小于 0 时翻到结束，不保存原始页。")
+    @mcp.tool(description="历史。没有已校验会话时只返回确认链接，不发请求。action 为 list 或 download。list 默认 3 页；download 在 max_pages 小于 0 时翻到结束，不保存原始页。")
     def mp_history(
         action: str = "list",
         max_pages: int = -1,
@@ -203,11 +204,11 @@ def _register_full(mcp: FastMCP, app: App) -> None:
     def download_one(url: str) -> dict:
         return app.download_one(url)
 
-    @mcp.tool(description="列出合集或公众号主页里的文章。公开合集不需要会话。")
+    @mcp.tool(description="列出合集或主页。没有已校验会话时只返回确认链接，不下载当前可见文章。")
     def list_album(url: str, max_pages: int = 5) -> dict:
         return app.list_album(url, max_pages=max_pages)
 
-    @mcp.tool(description="后台下载合集或主页文章。公开合集不需要会话。")
+    @mcp.tool(description="后台下载合集或主页。没有已校验会话时只返回确认链接，不开始下载。")
     def download_album(url: str, max_pages: int = 0, save_markdown: bool = False) -> dict:
         return app.download_album(url, max_pages=max_pages, save_markdown=save_markdown)
 
